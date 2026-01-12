@@ -4,39 +4,61 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AWS Lambda function that fetches train transit information from Jorudan (Japanese transit service). Deployed using AWS SAM (Serverless Application Model).
+AWS Lambda function that fetches train transit information from Jorudan (Japanese transit service). Deployed using AWS SAM.
 
 ## Architecture
 
-- **Runtime**: Python 3.8
-- **Entry point**: `src/lambda_function.py` → `lambda_handler(event, context)`
+- **Runtime**: Node.js 22 (ESM)
+- **Entry point**: `src/index.mjs` → `handler(event, context)`
 - **API Gateway trigger**: GET `/transit`
 - **Region**: ap-northeast-1
 
 ## Build and Deploy
 
 ```bash
-# Validate SAM template
-sam validate
+# Local development with Docker
+docker-compose up -d --build
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
 
-# Build the application
-sam build
+# Run tests
+npm test                    # Unit tests
+npm run test:e2e           # E2E tests
 
-# Deploy (first time - guided)
-sam deploy --guided
-
-# Deploy (subsequent)
-sam deploy
-
-# Local testing
-sam local invoke
-sam local start-api
+# SAM deployment
+sam build && sam deploy
 ```
 
-## Code Structure
+## Key Implementation Notes
 
-The Lambda function scrapes Jorudan's transit website and parses HTML to extract:
-- `getSummary()`: Departure/arrival times, duration, transfer count
-- `getRoute()`: Detailed route information
+### Jorudan Bot Detection
+Jorudan uses CloudFront with JavaScript redirect for bot detection. Simple fetch fails.
 
-Returns JSON with `transfers` array containing `[summary, route]` pairs.
+**Solution**: 3-step cookie flow
+1. Initial request → get redirect URL from `window.location.href`
+2. Follow `/webuser/set-uuid.cgi?url=...` → collect cookies
+3. Request final URL with cookies → get transit data
+
+### HTML Parsing
+- Split by `<hr size="1" color="black">` (handle both self-closing and non-self-closing)
+- Line endings: Handle both `\r\n` and `\n` with regex `/\r?\n\r?\n/`
+- Target block: `blocks[2]` contains transit info
+
+### Response Format
+```json
+{
+  "transfers": [
+    ["18:49発 → 19:38着(49分)(1回)", "■六本木一丁目\n｜東京メトロ南北線..."]
+  ]
+}
+```
+
+## Files
+
+| File | Description |
+|------|-------------|
+| `src/index.mjs` | Lambda handler with cookie flow |
+| `src/lambda_function.py` | Original Python (reference only) |
+| `tests/handler.test.mjs` | Unit tests (12 tests) |
+| `tests/e2e.test.mjs` | E2E tests |
+| `template.yml` | SAM template |
+| `Dockerfile` | Lambda container image |
