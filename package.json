@@ -1,0 +1,20 @@
+{
+  "name": "lambda-function-transit-root",
+  "version": "1.0.0",
+  "description": "Root package for testing AWS Lambda transit function",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:unit": "node --test tests/handler.test.mjs",
+    "test:e2e": "node --test tests/e2e.test.mjs"
+  },
+  "keywords": [
+    "lambda",
+    "transit",
+    "test"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
