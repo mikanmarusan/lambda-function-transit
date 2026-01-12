@@ -146,4 +146,46 @@ describe('handler', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('should reject SSRF attempt via protocol in redirect path', async () => {
+    // Malicious redirect attempting to escape to another domain
+    const ssrfRedirectPage = '<!DOCTYPE html><script>function rdr(){window.location.href="//evil.com/steal"}</script>';
+
+    const mockFetch = mock.fn(async () => ({
+      ok: true,
+      text: async () => ssrfRedirectPage,
+      headers: createMockHeaders({}),
+    }));
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch;
+
+    try {
+      const result = await handler({}, {});
+      assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error message');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('should handle HTTP error status codes', async () => {
+    const mockFetch = mock.fn(async () => ({
+      ok: false,
+      status: 403,
+      text: async () => 'Forbidden',
+      headers: createMockHeaders({}),
+    }));
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch;
+
+    try {
+      const result = await handler({}, {});
+      assert.strictEqual(result.statusCode, 500, 'Should return status 500 on HTTP error');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

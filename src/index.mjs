@@ -4,6 +4,19 @@
  */
 
 const JORUDAN_URL = 'https://www.jorudan.co.jp/norikae/cgi/nori.cgi?rf=top&eok1=R-&eok2=R-&pg=0&eki1=%E5%85%AD%E6%9C%AC%E6%9C%A8%E4%B8%80%E4%B8%81%E7%9B%AE&Cmap1=&eki2=%E3%81%A4%E3%81%A4%E3%81%98%E3%83%B6%E4%B8%98%EF%BC%88%E6%9D%B1%E4%BA%AC%EF%BC%89&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t';
+const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
+const REQUEST_TIMEOUT_MS = 3000;
+const MIN_EXPECTED_BLOCKS = 3;
+const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
+
+/**
+ * Escape special regex characters in a string
+ * @param {string} string - String to escape
+ * @returns {string} Escaped string safe for regex
+ */
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * Extract a field value from summary text
@@ -12,7 +25,8 @@ const JORUDAN_URL = 'https://www.jorudan.co.jp/norikae/cgi/nori.cgi?rf=top&eok1=
  * @returns {string} Extracted value or empty string
  */
 function extractField(summary, label) {
-  const match = summary.match(new RegExp(`${label}：([^\r\n]*)`));
+  const escapedLabel = escapeRegExp(label);
+  const match = summary.match(new RegExp(`${escapedLabel}：([^\r\n]*)`));
   return match ? match[1] : '';
 }
 
@@ -63,6 +77,20 @@ function extractRedirectUrl(body) {
 }
 
 /**
+ * Safely join base URL with path, preventing SSRF via protocol injection
+ * @param {string} base - Base URL (e.g., 'https://www.jorudan.co.jp')
+ * @param {string} path - Path to join
+ * @returns {string} Full URL
+ * @throws {Error} If path contains protocol or attempts domain escape
+ */
+function safeJoinUrl(base, path) {
+  if (path.startsWith('//') || path.includes('://')) {
+    throw new Error('Invalid redirect path detected');
+  }
+  return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
+/**
  * Extract cookies from Set-Cookie headers
  * @param {Headers} headers - Response headers
  * @returns {string} Cookie string for subsequent requests
@@ -86,7 +114,7 @@ function extractCookies(headers) {
 async function fetchTransitPage(url) {
   // Step 1: Initial request to get redirect page
   const response1 = await fetch(url, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: BROWSER_HEADERS,
     redirect: 'manual',
   });
@@ -105,9 +133,9 @@ async function fetchTransitPage(url) {
   }
 
   // Step 2: Follow the UUID redirect to get cookie
-  const redirectUrl = `https://www.jorudan.co.jp${redirectPath}`;
+  const redirectUrl = safeJoinUrl(JORUDAN_BASE_URL, redirectPath);
   const response2 = await fetch(redirectUrl, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       ...BROWSER_HEADERS,
       ...(cookies && { Cookie: cookies }),
@@ -124,14 +152,14 @@ async function fetchTransitPage(url) {
   // Step 3: Follow Location header if present, or extract final URL
   let finalUrl = response2.headers.get('location');
   if (finalUrl && !finalUrl.startsWith('http')) {
-    finalUrl = `https://www.jorudan.co.jp${finalUrl}`;
+    finalUrl = safeJoinUrl(JORUDAN_BASE_URL, finalUrl);
   }
 
   // If no location header, the redirect URL contains the final URL in query param
   if (!finalUrl) {
     const urlParam = new URL(redirectUrl).searchParams.get('url');
     if (urlParam) {
-      finalUrl = `https://www.jorudan.co.jp${decodeURIComponent(urlParam)}`;
+      finalUrl = safeJoinUrl(JORUDAN_BASE_URL, decodeURIComponent(urlParam));
     }
   }
 
@@ -141,7 +169,7 @@ async function fetchTransitPage(url) {
 
   // Step 4: Fetch the actual transit page with cookies
   const response3 = await fetch(finalUrl, {
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       ...BROWSER_HEADERS,
       ...(cookies && { Cookie: cookies }),
@@ -189,16 +217,21 @@ export async function handler(event, context) {
     const body = await fetchTransitPage(JORUDAN_URL);
     const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
 
-    if (blocks.length < 3) {
+    if (blocks.length < MIN_EXPECTED_BLOCKS) {
       throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);
     }
 
-    const targetBlock = blocks[2];
+    const targetBlock = blocks[TARGET_BLOCK_INDEX];
     const transfers = [[getSummary(targetBlock), getRoute(targetBlock)]];
 
     return createResponse(200, { transfers });
   } catch (error) {
-    console.error('Error fetching transit info:', error.message, error.stack);
+    console.error(JSON.stringify({
+      level: 'error',
+      message: 'Error fetching transit info',
+      errorType: error.name,
+      errorMessage: error.message,
+    }));
     return createResponse(500, { error: 'Failed to fetch transit information' });
   }
 }
