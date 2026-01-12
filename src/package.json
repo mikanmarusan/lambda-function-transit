@@ -1,0 +1,19 @@
+{
+  "name": "lambda-function-transit",
+  "version": "1.0.0",
+  "description": "AWS Lambda function to fetch transit information from Jorudan",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "keywords": [
+    "lambda",
+    "transit",
+    "jorudan"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
