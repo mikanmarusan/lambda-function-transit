@@ -12,7 +12,8 @@ const JORUDAN_URL = 'https://www.jorudan.co.jp/norikae/cgi/nori.cgi?rf=top&eok1=
  */
 export function getSummary(block) {
   const trimmed = block.trim();
-  const items = trimmed.split('\r\n\r\n');
+  // Handle both \r\n\r\n and \n\n as block separators
+  const items = trimmed.split(/\r?\n\r?\n/);
   const summary = items[0] || '';
 
   let arrivalAndDepartureTime = '';
@@ -44,7 +45,8 @@ export function getSummary(block) {
  */
 export function getRoute(block) {
   const trimmed = block.trim();
-  const items = trimmed.split('\r\n\r\n');
+  // Handle both \r\n\r\n and \n\n as block separators
+  const items = trimmed.split(/\r?\n\r?\n/);
   let route = items[1] || '';
 
   // Remove unnecessary characters and generate detailed route
@@ -59,30 +61,123 @@ export function getRoute(block) {
   return route;
 }
 
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+  'Referer': 'https://www.jorudan.co.jp/',
+};
+
+/**
+ * Extract redirect URL from JavaScript redirect page
+ * @param {string} body - HTML body containing JS redirect
+ * @returns {string|null} Redirect URL or null
+ */
+function extractRedirectUrl(body) {
+  const match = body.match(/window\.location\.href="([^"]+)"/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Extract cookies from Set-Cookie headers
+ * @param {Headers} headers - Response headers
+ * @returns {string} Cookie string for subsequent requests
+ */
+function extractCookies(headers) {
+  const cookies = [];
+  const setCookieHeader = headers.get('set-cookie');
+  if (setCookieHeader) {
+    // Handle multiple cookies (may be comma-separated or multiple headers)
+    const cookieParts = setCookieHeader.split(/,(?=\s*\w+=)/);
+    for (const part of cookieParts) {
+      const cookieValue = part.split(';')[0].trim();
+      if (cookieValue) {
+        cookies.push(cookieValue);
+      }
+    }
+  }
+  return cookies.join('; ');
+}
+
 /**
  * Fetch URL with cookie handling for Jorudan's UUID redirect
  * @param {string} url - URL to fetch
  * @returns {Promise<string>} HTML body
  */
 async function fetchTransitPage(url) {
-  // Simple headers - timeout set to 8s to leave buffer for Lambda's 10s timeout
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(8000),
+  // Step 1: Initial request to get redirect page
+  const response1 = await fetch(url, {
+    signal: AbortSignal.timeout(3000),
+    headers: BROWSER_HEADERS,
+    redirect: 'manual',
+  });
+
+  const body1 = await response1.text();
+  let cookies = extractCookies(response1.headers);
+
+  // Check if we got a JavaScript redirect page
+  const redirectPath = extractRedirectUrl(body1);
+  if (!redirectPath) {
+    // No redirect needed, check if we have valid data
+    if (body1.includes('<hr size="1"')) {
+      return body1;
+    }
+    throw new Error('Unexpected response: no redirect and no transit data');
+  }
+
+  // Step 2: Follow the UUID redirect to get cookie
+  const redirectUrl = `https://www.jorudan.co.jp${redirectPath}`;
+  const response2 = await fetch(redirectUrl, {
+    signal: AbortSignal.timeout(3000),
     headers: {
-      'User-Agent': 'Python-urllib/3.8',
-      'Accept': '*/*',
+      ...BROWSER_HEADERS,
+      ...(cookies && { Cookie: cookies }),
+    },
+    redirect: 'manual',
+  });
+
+  // Collect cookies from redirect response
+  const newCookies = extractCookies(response2.headers);
+  if (newCookies) {
+    cookies = cookies ? `${cookies}; ${newCookies}` : newCookies;
+  }
+
+  // Step 3: Follow Location header if present, or extract final URL
+  let finalUrl = response2.headers.get('location');
+  if (finalUrl && !finalUrl.startsWith('http')) {
+    finalUrl = `https://www.jorudan.co.jp${finalUrl}`;
+  }
+
+  // If no location header, the redirect URL contains the final URL in query param
+  if (!finalUrl) {
+    const urlParam = new URL(redirectUrl).searchParams.get('url');
+    if (urlParam) {
+      finalUrl = `https://www.jorudan.co.jp${decodeURIComponent(urlParam)}`;
+    }
+  }
+
+  if (!finalUrl) {
+    throw new Error('Could not determine final URL after redirect');
+  }
+
+  // Step 4: Fetch the actual transit page with cookies
+  const response3 = await fetch(finalUrl, {
+    signal: AbortSignal.timeout(3000),
+    headers: {
+      ...BROWSER_HEADERS,
+      ...(cookies && { Cookie: cookies }),
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  if (!response3.ok) {
+    throw new Error(`HTTP error! status: ${response3.status}`);
   }
 
-  const body = await response.text();
+  const body = await response3.text();
 
-  // Check if we got a JavaScript redirect page (bot detection)
-  if (body.includes('window.location.href=') && !body.includes('<hr size="1"')) {
-    throw new Error('Access blocked: Site requires browser-based access. The original Python script may have had stored cookies or was run from an allowed IP.');
+  // Verify we got actual transit data
+  if (!body.includes('<hr size="1"')) {
+    throw new Error('Failed to get transit data after cookie flow');
   }
 
   return body;
