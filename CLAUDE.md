@@ -41,7 +41,12 @@ Jorudan uses CloudFront with JavaScript redirect for bot detection. Simple fetch
 ### HTML Parsing
 - Split by `<hr size="1" color="black">` (handle both self-closing and non-self-closing)
 - Line endings: Handle both `\r\n` and `\n` with regex `/\r?\n\r?\n/`
-- Target block: `blocks[2]` contains transit info
+- Target block: `blocks[TARGET_BLOCK_INDEX]` (index 2) contains transit info
+
+### Security Measures
+- **ReDoS protection**: `escapeRegExp()` escapes regex special chars in dynamic patterns
+- **SSRF protection**: `safeJoinUrl()` validates redirect paths (blocks `//` and `://`)
+- **Structured logging**: JSON format for CloudWatch analysis
 
 ### Response Format
 ```json
@@ -58,7 +63,7 @@ Jorudan uses CloudFront with JavaScript redirect for bot detection. Simple fetch
 |------|-------------|
 | `src/index.mjs` | Lambda handler with cookie flow |
 | `src/lambda_function.py` | Original Python (reference only) |
-| `tests/handler.test.mjs` | Unit tests (12 tests) |
+| `tests/handler.test.mjs` | Unit tests (16 tests) |
 | `tests/e2e.test.mjs` | E2E tests |
 | `template.yml` | SAM template |
 | `Dockerfile` | Lambda container image |

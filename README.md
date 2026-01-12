@@ -75,7 +75,7 @@ src/
 ├── package.json       # Dependencies
 └── lambda_function.py # Original Python (reference)
 tests/
-├── handler.test.mjs   # Unit tests (12 tests)
+├── handler.test.mjs   # Unit tests (16 tests)
 └── e2e.test.mjs       # E2E tests
 Dockerfile             # Lambda container image
 docker-compose.yml     # Local development
