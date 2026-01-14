@@ -19,18 +19,21 @@ describe('E2E Tests', () => {
         // Verify response structure
         assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
         assert.ok(body.transfers.length > 0, 'transfers should not be empty');
+        assert.ok(body.transfers.length <= 2, 'transfers should have at most 2 candidates');
 
-        const [summary, route] = body.transfers[0];
+        // Verify each candidate
+        body.transfers.forEach(([summary, route], index) => {
+          assert.ok(typeof summary === 'string', `candidate ${index} summary should be a string`);
+          assert.ok(summary.length > 0, `candidate ${index} summary should not be empty`);
+          assert.ok(typeof route === 'string', `candidate ${index} route should be a string`);
+        });
 
-        // Verify summary format (time(duration)(transfers))
-        assert.ok(typeof summary === 'string', 'summary should be a string');
-        assert.ok(summary.length > 0, 'summary should not be empty');
-
-        // Verify route exists
-        assert.ok(typeof route === 'string', 'route should be a string');
-
-        console.log('Transit Summary:', summary);
-        console.log('Route:', route);
+        console.log(`Found ${body.transfers.length} transit candidates:`);
+        body.transfers.forEach(([summary, route], index) => {
+          console.log(`\nCandidate ${index + 1}:`);
+          console.log('  Summary:', summary);
+          console.log('  Route:', route.substring(0, 100) + '...');
+        });
       } else {
         // If failed, check error message exists
         assert.ok(body.error, 'Should have error message on failure');

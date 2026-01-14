@@ -8,6 +8,7 @@ const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
 const REQUEST_TIMEOUT_MS = 3000;
 const MIN_EXPECTED_BLOCKS = 3;
 const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
+const MAX_CANDIDATES = 2;  // Maximum number of transit candidates to return
 
 /**
  * Escape special regex characters in a string
@@ -57,6 +58,15 @@ export function getRoute(block) {
     .replace(/｜ 　/g, '｜')           // Remove extra spacing after separator
     .replace(/\s+$/gm, '')             // Remove trailing spaces from each line
     .replace(/\s{2,}(.*)$/gm, '');     // Remove lines with 2+ leading spaces
+}
+
+/**
+ * Split target block into individual routes
+ * @param {string} block - HTML block containing all routes
+ * @returns {string[]} Array of individual route blocks
+ */
+export function splitRoutes(block) {
+  return block.split(/(?=発着時間：)/).filter(r => r.trim() && r.includes('発着時間：'));
 }
 
 const BROWSER_HEADERS = {
@@ -222,7 +232,20 @@ export async function handler(event, context) {
     }
 
     const targetBlock = blocks[TARGET_BLOCK_INDEX];
-    const transfers = [[getSummary(targetBlock), getRoute(targetBlock)]];
+    const routes = splitRoutes(targetBlock);
+
+    if (routes.length === 0) {
+      throw new Error('No transit routes found in response');
+    }
+
+    const transfers = routes
+      .slice(0, MAX_CANDIDATES)
+      .map(route => [getSummary(route), getRoute(route)])
+      .filter(([summary, route]) => summary !== '()()' && route.trim());
+
+    if (transfers.length === 0) {
+      throw new Error('No valid transit routes found in response');
+    }
 
     return createResponse(200, { transfers });
   } catch (error) {

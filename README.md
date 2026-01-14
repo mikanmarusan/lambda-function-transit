@@ -55,13 +55,17 @@ sam deploy
 
 **Endpoint**: `GET /transit`
 
-**Response**:
+**Response** (up to 2 transit candidates):
 ```json
 {
   "transfers": [
     [
       "18:49発 → 19:38着(49分)(1回)",
-      "■六本木一丁目\n｜東京メトロ南北線(赤羽岩淵行)\n｜18:49-18:57［8分］\n｜516円\n◇市ヶ谷\n..."
+      "■六本木一丁目\n｜東京メトロ南北線...\n■つつじヶ丘（東京）"
+    ],
+    [
+      "18:55発 → 19:45着(50分)(2回)",
+      "■六本木一丁目\n｜東京メトロ丸ノ内線...\n■つつじヶ丘（東京）"
     ]
   ]
 }
@@ -75,7 +79,7 @@ src/
 ├── package.json       # Dependencies
 └── lambda_function.py # Original Python (reference)
 tests/
-├── handler.test.mjs   # Unit tests (16 tests)
+├── handler.test.mjs   # Unit tests
 └── e2e.test.mjs       # E2E tests
 Dockerfile             # Lambda container image
 docker-compose.yml     # Local development
