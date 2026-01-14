@@ -34,6 +34,23 @@ async function runWithMockedFetch(response, testFn) {
   }
 }
 
+// Helper to run handler with sequenced fetch responses
+async function runWithSequencedFetch(responses, testFn) {
+  let callIndex = 0;
+  const mockFetch = mock.fn(async () => {
+    const response = responses[callIndex] || responses[responses.length - 1];
+    callIndex++;
+    return response;
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mockFetch;
+  try {
+    return await testFn();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 // Helper to create a standard successful response
 function createMockResponse(html) {
   return {
@@ -171,6 +188,29 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(ssrfRedirectPage), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error message');
+    });
+  });
+
+  it('should reject SSRF attempt via absolute URL in Location header', async () => {
+    // Step 1: Initial request returns JS redirect page
+    const jsRedirectPage = '<!DOCTYPE html><script>window.location.href="/webuser/set-uuid.cgi?url=/test"</script>';
+    const response1 = createMockResponse(jsRedirectPage);
+
+    // Step 2: UUID redirect returns absolute URL pointing to malicious domain
+    const response2 = {
+      ok: true,
+      text: async () => '',
+      headers: createMockHeaders({
+        location: 'https://evil.com/steal',
+        'set-cookie': 'uuid=test123',
+      }),
+    };
+
+    await runWithSequencedFetch([response1, response2], async () => {
+      const result = await handler({}, {});
+      assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt via Location header');
       const body = JSON.parse(result.body);
       assert.ok(body.error, 'Should have error message');
     });
