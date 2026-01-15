@@ -9,7 +9,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ./src
-      Description: Lambda Function of Nagatacho To TsuTsujigaoka
+      Description: Lambda Function of Roppongi-itchome To TsuTsujigaoka
       MemorySize: 128
       Timeout: 10
       Handler: index.handler

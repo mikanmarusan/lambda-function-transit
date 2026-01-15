@@ -161,8 +161,15 @@ async function fetchTransitPage(url) {
 
   // Step 3: Follow Location header if present, or extract final URL
   let finalUrl = response2.headers.get('location');
-  if (finalUrl && !finalUrl.startsWith('http')) {
-    finalUrl = safeJoinUrl(JORUDAN_BASE_URL, finalUrl);
+  if (finalUrl) {
+    if (finalUrl.startsWith('http')) {
+      const parsedUrl = new URL(finalUrl);
+      if (parsedUrl.origin !== JORUDAN_BASE_URL) {
+        throw new Error('Invalid redirect: unexpected domain');
+      }
+    } else {
+      finalUrl = safeJoinUrl(JORUDAN_BASE_URL, finalUrl);
+    }
   }
 
   // If no location header, the redirect URL contains the final URL in query param
