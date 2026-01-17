@@ -11,33 +11,27 @@ describe('E2E Tests', () => {
       // Should succeed or fail gracefully
       assert.ok(result.statusCode === 200 || result.statusCode === 500, 'Should return valid status code');
       assert.ok(result.body, 'Should have body');
-      assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
+      assert.strictEqual(result.headers['Content-Type'], 'text/html; charset=utf-8', 'Should have HTML content type');
 
-      const body = JSON.parse(result.body);
+      // Body should be HTML
+      assert.ok(result.body.includes('<!DOCTYPE html>'), 'Should be valid HTML');
 
       if (result.statusCode === 200) {
-        // Verify response structure
-        assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
-        assert.ok(body.transfers.length > 0, 'transfers should not be empty');
-        assert.ok(body.transfers.length <= 2, 'transfers should have at most 2 candidates');
+        // Verify HTML structure for success case
+        assert.ok(result.body.includes('transit-card'), 'Should contain transit card');
+        assert.ok(result.body.includes('候補 1'), 'Should contain first candidate');
+        assert.ok(result.body.includes('六本木一丁目 → つつじヶ丘'), 'Should contain route title');
+        assert.ok(result.body.includes('prefers-color-scheme: dark'), 'Should include dark mode support');
+        assert.ok(result.body.includes('page-footer'), 'Should include footer');
+        assert.ok(result.body.includes('更新:'), 'Should include update timestamp');
 
-        // Verify each candidate
-        body.transfers.forEach(([summary, route], index) => {
-          assert.ok(typeof summary === 'string', `candidate ${index} summary should be a string`);
-          assert.ok(summary.length > 0, `candidate ${index} summary should not be empty`);
-          assert.ok(typeof route === 'string', `candidate ${index} route should be a string`);
-        });
-
-        console.log(`Found ${body.transfers.length} transit candidates:`);
-        body.transfers.forEach(([summary, route], index) => {
-          console.log(`\nCandidate ${index + 1}:`);
-          console.log('  Summary:', summary);
-          console.log('  Route:', route.substring(0, 100) + '...');
-        });
+        console.log('Success! Transit data fetched and rendered as HTML');
+        console.log('HTML length:', result.body.length, 'characters');
       } else {
-        // If failed, check error message exists
-        assert.ok(body.error, 'Should have error message on failure');
-        console.log('Error:', body.error);
+        // If failed, check error page structure
+        assert.ok(result.body.includes('error-card'), 'Should have error card on failure');
+        assert.ok(result.body.includes('エラー'), 'Should have error heading');
+        console.log('Error page rendered');
       }
     });
   });
@@ -63,7 +57,11 @@ describe('E2E Tests', () => {
         assert.ok(result.statusCode, 'Should have statusCode');
         assert.ok(result.body, 'Should have body');
 
-        console.log('Docker Lambda Response:', result);
+        // Verify HTML response
+        assert.ok(result.body.includes('<!DOCTYPE html>'), 'Should return HTML');
+
+        console.log('Docker Lambda Response statusCode:', result.statusCode);
+        console.log('Docker Lambda Response body length:', result.body.length);
       } catch (error) {
         if (error.cause?.code === 'ECONNREFUSED') {
           console.log('Docker Lambda container not running, skipping E2E Docker test');
