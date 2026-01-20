@@ -6,7 +6,10 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "test:unit": "node --test tests/handler.test.mjs",
-    "test:e2e": "node --test tests/e2e.test.mjs"
+    "test:e2e": "node --test tests/e2e.test.mjs",
+    "test:coverage": "c8 node --test tests/*.test.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [
     "lambda",
@@ -16,5 +19,9 @@
   "license": "MIT",
   "engines": {
     "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "c8": "^9.1.0",
+    "eslint": "^9.0.0"
   }
 }

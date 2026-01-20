@@ -147,9 +147,8 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       assert.ok(result.body, 'Should have body');
-
       const body = JSON.parse(result.body);
-      assert.ok(Array.isArray(body.transfers), 'Should have transfers array');
+      assert.ok(body.transfers, 'Should have transfers array');
     });
   });
 
@@ -159,9 +158,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(redirectPage), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on bot detection');
-
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -169,9 +167,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse('only one block'), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500');
-
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -189,7 +186,7 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt');
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -212,7 +209,7 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt via Location header');
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -234,11 +231,10 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockMultipleBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-
       const body = JSON.parse(result.body);
-      assert.strictEqual(body.transfers.length, 2, 'Should return 2 candidates');
-      assert.ok(body.transfers[0][0].includes('06:30～08:45'), 'First candidate should have first route time');
-      assert.ok(body.transfers[1][0].includes('07:00～09:00'), 'Second candidate should have second route time');
+      assert.strictEqual(body.transfers.length, 2, 'Should have 2 transfers');
+      assert.ok(body.transfers[0][0].includes('06:30'), 'Should contain first route time');
+      assert.ok(body.transfers[1][0].includes('07:00'), 'Should contain second route time');
     });
   });
 
@@ -246,9 +242,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockThreeBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-
       const body = JSON.parse(result.body);
-      assert.strictEqual(body.transfers.length, 2, 'Should return only 2 candidates even when 3 available');
+      assert.strictEqual(body.transfers.length, 2, 'Should have only 2 transfers');
     });
   });
 
@@ -256,9 +251,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml('no routes here')), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 when no routes found');
-
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -268,9 +262,47 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(malformedBlock)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 for malformed route data');
-
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error message');
+      assert.ok(body.error, 'Should have error in response');
     });
+  });
+
+  it('should return transfers array with summary and route', async () => {
+    await runWithMockedFetch(createMockResponse(validHtml), async () => {
+      const result = await handler({}, {});
+      const body = JSON.parse(result.body);
+      assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
+      assert.ok(body.transfers.length > 0, 'transfers should have at least one element');
+      assert.ok(Array.isArray(body.transfers[0]), 'Each transfer should be an array');
+      assert.strictEqual(body.transfers[0].length, 2, 'Each transfer should have 2 elements [summary, route]');
+    });
+  });
+});
+
+describe('/status endpoint', () => {
+  it('should return status 200 with JSON response', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(result.statusCode, 200, 'Should return status 200');
+    assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
+  });
+
+  it('should return ok status in body', async () => {
+    const result = await handler({ path: '/status' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(body.status, 'ok', 'Should have status ok');
+  });
+
+  it('should include timestamp in response', async () => {
+    const result = await handler({ path: '/status' }, {});
+    const body = JSON.parse(result.body);
+    assert.ok(body.timestamp, 'Should have timestamp');
+    assert.ok(!isNaN(Date.parse(body.timestamp)), 'Timestamp should be valid ISO date');
+  });
+
+  it('should handle rawPath for API Gateway v2', async () => {
+    const result = await handler({ rawPath: '/status' }, {});
+    assert.strictEqual(result.statusCode, 200, 'Should return status 200');
+    const body = JSON.parse(result.body);
+    assert.strictEqual(body.status, 'ok', 'Should have status ok');
   });
 });

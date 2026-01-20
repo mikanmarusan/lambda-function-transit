@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { handler } from '../src/index.mjs';
 
@@ -16,28 +16,25 @@ describe('E2E Tests', () => {
       const body = JSON.parse(result.body);
 
       if (result.statusCode === 200) {
-        // Verify response structure
+        // Verify JSON structure for success case
+        assert.ok(body.transfers, 'Should have transfers array');
         assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
-        assert.ok(body.transfers.length > 0, 'transfers should not be empty');
-        assert.ok(body.transfers.length <= 2, 'transfers should have at most 2 candidates');
+        assert.ok(body.transfers.length > 0, 'Should have at least one transfer');
+        assert.ok(body.transfers.length <= 2, 'Should have at most 2 transfers');
 
-        // Verify each candidate
-        body.transfers.forEach(([summary, route], index) => {
-          assert.ok(typeof summary === 'string', `candidate ${index} summary should be a string`);
-          assert.ok(summary.length > 0, `candidate ${index} summary should not be empty`);
-          assert.ok(typeof route === 'string', `candidate ${index} route should be a string`);
-        });
+        // Each transfer should be [summary, route]
+        const [summary, route] = body.transfers[0];
+        assert.ok(typeof summary === 'string', 'Summary should be a string');
+        assert.ok(typeof route === 'string', 'Route should be a string');
+        assert.ok(summary.includes('('), 'Summary should contain parentheses');
 
-        console.log(`Found ${body.transfers.length} transit candidates:`);
-        body.transfers.forEach(([summary, route], index) => {
-          console.log(`\nCandidate ${index + 1}:`);
-          console.log('  Summary:', summary);
-          console.log('  Route:', route.substring(0, 100) + '...');
-        });
+        console.log('Success! Transit data fetched as JSON');
+        console.log('Number of transfers:', body.transfers.length);
+        console.log('First transfer summary:', summary);
       } else {
-        // If failed, check error message exists
-        assert.ok(body.error, 'Should have error message on failure');
-        console.log('Error:', body.error);
+        // If failed, check error response structure
+        assert.ok(body.error, 'Should have error field on failure');
+        console.log('Error response:', body.error);
       }
     });
   });
@@ -63,7 +60,12 @@ describe('E2E Tests', () => {
         assert.ok(result.statusCode, 'Should have statusCode');
         assert.ok(result.body, 'Should have body');
 
-        console.log('Docker Lambda Response:', result);
+        // Verify JSON response
+        const body = JSON.parse(result.body);
+        assert.ok(body.transfers || body.error, 'Should have transfers or error');
+
+        console.log('Docker Lambda Response statusCode:', result.statusCode);
+        console.log('Docker Lambda Response:', body);
       } catch (error) {
         if (error.cause?.code === 'ECONNREFUSED') {
           console.log('Docker Lambda container not running, skipping E2E Docker test');

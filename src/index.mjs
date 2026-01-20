@@ -207,29 +207,41 @@ async function fetchTransitPage(url) {
   return body;
 }
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+};
 
 /**
- * Create a Lambda response object
+ * Create a JSON Lambda response object
  * @param {number} statusCode - HTTP status code
- * @param {Object} body - Response body object
+ * @param {Object} data - Response data
  * @returns {Object} Lambda response
  */
-function createResponse(statusCode, body) {
+function createJsonResponse(statusCode, data) {
   return {
     statusCode,
-    body: JSON.stringify(body),
     headers: JSON_HEADERS,
+    body: JSON.stringify(data),
   };
 }
 
 /**
  * Lambda handler function
  * @param {Object} event - Lambda event object
- * @param {Object} context - Lambda context object
+ * @param {Object} _context - Lambda context object
  * @returns {Object} Response with transit information
  */
-export async function handler(event, context) {
+export async function handler(event, _context) {
+  const path = event.path || event.rawPath || '/transit';
+
+  // Health check endpoint
+  if (path === '/status') {
+    return createJsonResponse(200, { status: 'ok', timestamp: new Date().toISOString() });
+  }
+
   try {
     const body = await fetchTransitPage(JORUDAN_URL);
     const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
@@ -254,7 +266,7 @@ export async function handler(event, context) {
       throw new Error('No valid transit routes found in response');
     }
 
-    return createResponse(200, { transfers });
+    return createJsonResponse(200, { transfers });
   } catch (error) {
     console.error(JSON.stringify({
       level: 'error',
@@ -262,6 +274,6 @@ export async function handler(event, context) {
       errorType: error.name,
       errorMessage: error.message,
     }));
-    return createResponse(500, { error: 'Failed to fetch transit information' });
+    return createJsonResponse(500, { error: 'Failed to fetch transit information' });
   }
 }
