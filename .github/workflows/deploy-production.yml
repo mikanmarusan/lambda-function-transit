@@ -42,7 +42,7 @@ jobs:
         run: sam build
       - name: SAM Deploy
         if: ${{ github.event.inputs.dry-run != 'true' }}
-        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
+        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --resolve-s3
       - name: Health Check
         if: ${{ github.event.inputs.dry-run != 'true' }}
         run: |

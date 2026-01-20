@@ -5,3 +5,4 @@ stack_name = "transitmikanmarusan"
 region = "ap-northeast-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
