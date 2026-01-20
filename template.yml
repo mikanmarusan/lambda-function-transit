@@ -4,6 +4,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: An AWS Serverless Application Model template describing your function.
+
+Globals:
+  Api:
+    Cors:
+      AllowOrigin: "'*'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowMethods: "'GET,OPTIONS'"
+
 Resources:
   transitmikanmarusan:
     Type: AWS::Serverless::Function
@@ -43,5 +51,23 @@ Resources:
           Properties:
             Path: /transit
             Method: GET
+        Status:
+          Type: Api
+          Properties:
+            Path: /status
+            Method: GET
       RuntimeManagementConfig:
         UpdateRuntimeOn: Auto
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod'
+    Export:
+      Name: !Sub '${AWS::StackName}-api-endpoint'
+
+  TransitFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt transitmikanmarusan.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-lambda-arn'

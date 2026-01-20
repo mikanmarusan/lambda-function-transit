@@ -207,323 +207,41 @@ async function fetchTransitPage(url) {
   return body;
 }
 
-const HTML_HEADERS = { 'Content-Type': 'text/html; charset=utf-8' };
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+};
 
 /**
- * Escape HTML special characters to prevent XSS
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
- */
-function escapeHtml(text) {
-  const escapeMap = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  };
-  return String(text).replace(/[&<>"']/g, (char) => escapeMap[char]);
-}
-
-/**
- * Generate CSS styles for the HTML page (Light/Dark mode support)
- * @returns {string} CSS styles
- */
-function getStyles() {
-  return `
-    :root {
-      --bg-base: #f8fafc;
-      --bg-card: #ffffff;
-      --bg-muted: #f1f5f9;
-      --text-foreground: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #94a3b8;
-      --border: rgba(0, 0, 0, 0.08);
-      --accent: #0066cc;
-      --line-color: #22c55e;
-      --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg-base: #0f172a;
-        --bg-card: #1e293b;
-        --bg-muted: #334155;
-        --text-foreground: #f8fafc;
-        --text-secondary: #cbd5e1;
-        --text-muted: #64748b;
-        --border: rgba(255, 255, 255, 0.1);
-        --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
-      }
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
-      background: var(--bg-base);
-      color: var(--text-foreground);
-      line-height: 1.5;
-      padding: 16px;
-      min-height: 100vh;
-    }
-    .container { max-width: 480px; margin: 0 auto; }
-    .page-header { text-align: center; margin-bottom: 24px; }
-    .page-header h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-    .route-title { font-size: 14px; color: var(--text-secondary); }
-    .transit-card {
-      background: var(--bg-card);
-      border: 0.5px solid var(--border);
-      border-radius: 8px;
-      box-shadow: var(--shadow-card);
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-    .card-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-    .option-badge {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--accent);
-    }
-    .card-body { padding: 16px; }
-    .time-display {
-      font-family: "SF Mono", ui-monospace, monospace;
-      font-variant-numeric: tabular-nums;
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .time-arrow { color: var(--text-muted); font-weight: 400; }
-    .meta {
-      display: flex;
-      gap: 12px;
-      margin-top: 8px;
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
-    .route-timeline {
-      padding: 16px;
-      background: var(--bg-muted);
-      border-top: 1px solid var(--border);
-    }
-    .station {
-      position: relative;
-      padding-left: 24px;
-      padding-top: 6px;
-      padding-bottom: 6px;
-      font-size: 15px;
-    }
-    .station::before {
-      content: '';
-      position: absolute;
-      left: 6px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--bg-card);
-      border: 2px solid var(--line-color);
-    }
-    .station-terminal::before { background: var(--line-color); }
-    .line-name {
-      padding-left: 24px;
-      font-size: 13px;
-      color: var(--text-muted);
-      position: relative;
-      padding-top: 2px;
-      padding-bottom: 2px;
-    }
-    .line-name::before {
-      content: '';
-      position: absolute;
-      left: 9px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: var(--line-color);
-    }
-    .page-footer {
-      text-align: center;
-      padding: 16px;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .error-card {
-      background: var(--bg-card);
-      border: 0.5px solid var(--border);
-      border-radius: 8px;
-      padding: 32px 24px;
-      text-align: center;
-      box-shadow: var(--shadow-card);
-    }
-    .error-card h1 { color: #ef4444; font-size: 18px; margin-bottom: 8px; }
-    .error-detail { font-size: 12px; color: var(--text-muted); margin-top: 16px; }
-  `;
-}
-
-/**
- * Parse summary string to extract time components
- * @param {string} summary - Summary string like "19:47発 → 20:36着(49分)(3回)" or "06:30～08:45(2時間15分)(2回)"
- * @returns {Object} Parsed components
- */
-function parseSummary(summary) {
-  // Try format: "19:47発 → 20:36着" first, then "06:30～08:45"
-  let timeMatch = summary.match(/(\d+:\d+)発.*?(\d+:\d+)着/);
-  if (!timeMatch) {
-    timeMatch = summary.match(/(\d+:\d+)～(\d+:\d+)/);
-  }
-  const durationMatch = summary.match(/\(([^)]*分)\)/);
-  const transfersMatch = summary.match(/\((\d+回)\)/);
-
-  return {
-    departure: timeMatch?.[1] || '',
-    arrival: timeMatch?.[2] || '',
-    duration: durationMatch?.[1] || '',
-    transfers: transfersMatch?.[1] || '',
-  };
-}
-
-/**
- * Render route text as timeline HTML
- * @param {string} routeText - Route text with stations and lines
- * @returns {string} HTML string
- */
-function renderRoute(routeText) {
-  const lines = routeText.split('\n').filter((line) => line.trim());
-  const totalLines = lines.length;
-
-  return lines
-    .map((line, index) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('｜')) {
-        const lineName = trimmed.slice(1).trim();
-        return `<div class="line-name">${escapeHtml(lineName)}</div>`;
-      }
-      const isTerminal = index === 0 || index === totalLines - 1;
-      const stationClass = isTerminal ? 'station station-terminal' : 'station';
-      return `<div class="${stationClass}">${escapeHtml(trimmed)}</div>`;
-    })
-    .join('');
-}
-
-/**
- * Render a single transit card
- * @param {Array} transfer - [summary, route] tuple
- * @param {number} index - Card index
- * @returns {string} HTML string
- */
-function renderTransitCard(transfer, index) {
-  const [summary, route] = transfer;
-  const parsed = parseSummary(summary);
-
-  return `
-    <article class="transit-card">
-      <header class="card-header">
-        <span class="option-badge">候補 ${index + 1}</span>
-      </header>
-      <div class="card-body">
-        <div class="time-display">
-          <span>${escapeHtml(parsed.departure)}</span>
-          <span class="time-arrow">→</span>
-          <span>${escapeHtml(parsed.arrival)}</span>
-        </div>
-        <div class="meta">
-          <span>${escapeHtml(parsed.duration)}</span>
-          <span>乗換${escapeHtml(parsed.transfers)}</span>
-        </div>
-      </div>
-      <div class="route-timeline">
-        ${renderRoute(route)}
-      </div>
-    </article>
-  `;
-}
-
-/**
- * Render the full HTML page
- * @param {Array} transfers - Array of [summary, route] tuples
- * @returns {string} Full HTML page
- */
-function renderHtmlPage(transfers) {
-  const cardsHtml = transfers.map((t, i) => renderTransitCard(t, i)).join('');
-  const timestamp = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>電車経路</title>
-  <style>${getStyles()}</style>
-</head>
-<body>
-  <main class="container">
-    <header class="page-header">
-      <h1>電車経路</h1>
-      <p class="route-title">六本木一丁目 → つつじヶ丘</p>
-    </header>
-    <section class="cards">
-      ${cardsHtml}
-    </section>
-    <footer class="page-footer">
-      <p>更新: ${escapeHtml(timestamp)}</p>
-    </footer>
-  </main>
-</body>
-</html>`;
-}
-
-/**
- * Render error page HTML
- * @param {string} message - Error message
- * @returns {string} Full HTML error page
- */
-function renderErrorPage(message) {
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>エラー | 電車経路</title>
-  <style>${getStyles()}</style>
-</head>
-<body>
-  <main class="container">
-    <div class="error-card">
-      <h1>エラー</h1>
-      <p>経路情報の取得に失敗しました</p>
-      <p class="error-detail">${escapeHtml(message)}</p>
-    </div>
-  </main>
-</body>
-</html>`;
-}
-
-/**
- * Create an HTML Lambda response object
+ * Create a JSON Lambda response object
  * @param {number} statusCode - HTTP status code
- * @param {string} html - HTML content
+ * @param {Object} data - Response data
  * @returns {Object} Lambda response
  */
-function createHtmlResponse(statusCode, html) {
+function createJsonResponse(statusCode, data) {
   return {
     statusCode,
-    body: html,
-    headers: HTML_HEADERS,
+    headers: JSON_HEADERS,
+    body: JSON.stringify(data),
   };
 }
 
 /**
  * Lambda handler function
  * @param {Object} event - Lambda event object
- * @param {Object} context - Lambda context object
+ * @param {Object} _context - Lambda context object
  * @returns {Object} Response with transit information
  */
-export async function handler(event, context) {
+export async function handler(event, _context) {
+  const path = event.path || event.rawPath || '/transit';
+
+  // Health check endpoint
+  if (path === '/status') {
+    return createJsonResponse(200, { status: 'ok', timestamp: new Date().toISOString() });
+  }
+
   try {
     const body = await fetchTransitPage(JORUDAN_URL);
     const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
@@ -548,7 +266,7 @@ export async function handler(event, context) {
       throw new Error('No valid transit routes found in response');
     }
 
-    return createHtmlResponse(200, renderHtmlPage(transfers));
+    return createJsonResponse(200, { transfers });
   } catch (error) {
     console.error(JSON.stringify({
       level: 'error',
@@ -556,6 +274,6 @@ export async function handler(event, context) {
       errorType: error.name,
       errorMessage: error.message,
     }));
-    return createHtmlResponse(500, renderErrorPage('サービスが一時的に利用できません'));
+    return createJsonResponse(500, { error: 'Failed to fetch transit information' });
   }
 }

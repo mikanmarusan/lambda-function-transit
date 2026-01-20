@@ -147,8 +147,8 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       assert.ok(result.body, 'Should have body');
-      assert.ok(result.body.includes('<!DOCTYPE html>'), 'Should return HTML');
-      assert.ok(result.body.includes('transit-card'), 'Should contain transit card');
+      const body = JSON.parse(result.body);
+      assert.ok(body.transfers, 'Should have transfers array');
     });
   });
 
@@ -158,7 +158,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(redirectPage), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on bot detection');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -166,14 +167,15 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse('only one block'), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
   it('should have correct content-type header', async () => {
     await runWithMockedFetch(createMockResponse(validHtml), async () => {
       const result = await handler({}, {});
-      assert.strictEqual(result.headers['Content-Type'], 'text/html; charset=utf-8', 'Should have HTML content type');
+      assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
     });
   });
 
@@ -183,7 +185,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(ssrfRedirectPage), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -205,7 +208,8 @@ describe('handler', () => {
     await runWithSequencedFetch([response1, response2], async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 on SSRF attempt via Location header');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -227,10 +231,10 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockMultipleBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-      assert.ok(result.body.includes('候補 1'), 'Should contain first candidate label');
-      assert.ok(result.body.includes('候補 2'), 'Should contain second candidate label');
-      assert.ok(result.body.includes('06:30'), 'Should contain first route departure time');
-      assert.ok(result.body.includes('07:00'), 'Should contain second route departure time');
+      const body = JSON.parse(result.body);
+      assert.strictEqual(body.transfers.length, 2, 'Should have 2 transfers');
+      assert.ok(body.transfers[0][0].includes('06:30'), 'Should contain first route time');
+      assert.ok(body.transfers[1][0].includes('07:00'), 'Should contain second route time');
     });
   });
 
@@ -238,9 +242,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockThreeBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-      assert.ok(result.body.includes('候補 1'), 'Should contain first candidate');
-      assert.ok(result.body.includes('候補 2'), 'Should contain second candidate');
-      assert.ok(!result.body.includes('候補 3'), 'Should not contain third candidate');
+      const body = JSON.parse(result.body);
+      assert.strictEqual(body.transfers.length, 2, 'Should have only 2 transfers');
     });
   });
 
@@ -248,7 +251,8 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml('no routes here')), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 when no routes found');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
@@ -258,41 +262,47 @@ describe('handler', () => {
     await runWithMockedFetch(createMockResponse(buildHtml(malformedBlock)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 500, 'Should return status 500 for malformed route data');
-      assert.ok(result.body.includes('error-card'), 'Should return error page HTML');
+      const body = JSON.parse(result.body);
+      assert.ok(body.error, 'Should have error in response');
     });
   });
 
-  it('should include dark mode CSS variables', async () => {
+  it('should return transfers array with summary and route', async () => {
     await runWithMockedFetch(createMockResponse(validHtml), async () => {
       const result = await handler({}, {});
-      assert.ok(result.body.includes('prefers-color-scheme: dark'), 'Should include dark mode media query');
+      const body = JSON.parse(result.body);
+      assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
+      assert.ok(body.transfers.length > 0, 'transfers should have at least one element');
+      assert.ok(Array.isArray(body.transfers[0]), 'Each transfer should be an array');
+      assert.strictEqual(body.transfers[0].length, 2, 'Each transfer should have 2 elements [summary, route]');
     });
   });
+});
 
-  it('should include page header with route title', async () => {
-    await runWithMockedFetch(createMockResponse(validHtml), async () => {
-      const result = await handler({}, {});
-      assert.ok(result.body.includes('六本木一丁目 → つつじヶ丘'), 'Should include route title');
-    });
+describe('/status endpoint', () => {
+  it('should return status 200 with JSON response', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(result.statusCode, 200, 'Should return status 200');
+    assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
   });
 
-  it('should include update timestamp in footer', async () => {
-    await runWithMockedFetch(createMockResponse(validHtml), async () => {
-      const result = await handler({}, {});
-      assert.ok(result.body.includes('更新:'), 'Should include update timestamp label');
-      assert.ok(result.body.includes('page-footer'), 'Should include footer class');
-    });
+  it('should return ok status in body', async () => {
+    const result = await handler({ path: '/status' }, {});
+    const body = JSON.parse(result.body);
+    assert.strictEqual(body.status, 'ok', 'Should have status ok');
   });
 
-  it('should escape HTML special characters', async () => {
-    // Create a mock block with special characters (simulating potential XSS)
-    const xssBlock = `発着時間：06:30～08:45\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n<script>alert("xss")</script>\r\n｜ 　テスト路線\r\n終点`;
+  it('should include timestamp in response', async () => {
+    const result = await handler({ path: '/status' }, {});
+    const body = JSON.parse(result.body);
+    assert.ok(body.timestamp, 'Should have timestamp');
+    assert.ok(!isNaN(Date.parse(body.timestamp)), 'Timestamp should be valid ISO date');
+  });
 
-    await runWithMockedFetch(createMockResponse(buildHtml(xssBlock)), async () => {
-      const result = await handler({}, {});
-      assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-      assert.ok(!result.body.includes('<script>alert'), 'Should escape script tags');
-      assert.ok(result.body.includes('&lt;script&gt;'), 'Should contain escaped script tag');
-    });
+  it('should handle rawPath for API Gateway v2', async () => {
+    const result = await handler({ rawPath: '/status' }, {});
+    assert.strictEqual(result.statusCode, 200, 'Should return status 200');
+    const body = JSON.parse(result.body);
+    assert.strictEqual(body.status, 'ok', 'Should have status ok');
   });
 });

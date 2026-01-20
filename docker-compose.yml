@@ -1,8 +1,21 @@
 services:
-  lambda:
+  # Development server (GET access via browser)
+  api-dev:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app
+
+  # Production-like environment (Lambda Runtime API)
+  api-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
     ports:
       - "9000:8080"
     environment:

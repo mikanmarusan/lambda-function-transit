@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { handler } from '../src/index.mjs';
 
@@ -11,27 +11,30 @@ describe('E2E Tests', () => {
       // Should succeed or fail gracefully
       assert.ok(result.statusCode === 200 || result.statusCode === 500, 'Should return valid status code');
       assert.ok(result.body, 'Should have body');
-      assert.strictEqual(result.headers['Content-Type'], 'text/html; charset=utf-8', 'Should have HTML content type');
+      assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
 
-      // Body should be HTML
-      assert.ok(result.body.includes('<!DOCTYPE html>'), 'Should be valid HTML');
+      const body = JSON.parse(result.body);
 
       if (result.statusCode === 200) {
-        // Verify HTML structure for success case
-        assert.ok(result.body.includes('transit-card'), 'Should contain transit card');
-        assert.ok(result.body.includes('候補 1'), 'Should contain first candidate');
-        assert.ok(result.body.includes('六本木一丁目 → つつじヶ丘'), 'Should contain route title');
-        assert.ok(result.body.includes('prefers-color-scheme: dark'), 'Should include dark mode support');
-        assert.ok(result.body.includes('page-footer'), 'Should include footer');
-        assert.ok(result.body.includes('更新:'), 'Should include update timestamp');
+        // Verify JSON structure for success case
+        assert.ok(body.transfers, 'Should have transfers array');
+        assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
+        assert.ok(body.transfers.length > 0, 'Should have at least one transfer');
+        assert.ok(body.transfers.length <= 2, 'Should have at most 2 transfers');
 
-        console.log('Success! Transit data fetched and rendered as HTML');
-        console.log('HTML length:', result.body.length, 'characters');
+        // Each transfer should be [summary, route]
+        const [summary, route] = body.transfers[0];
+        assert.ok(typeof summary === 'string', 'Summary should be a string');
+        assert.ok(typeof route === 'string', 'Route should be a string');
+        assert.ok(summary.includes('('), 'Summary should contain parentheses');
+
+        console.log('Success! Transit data fetched as JSON');
+        console.log('Number of transfers:', body.transfers.length);
+        console.log('First transfer summary:', summary);
       } else {
-        // If failed, check error page structure
-        assert.ok(result.body.includes('error-card'), 'Should have error card on failure');
-        assert.ok(result.body.includes('エラー'), 'Should have error heading');
-        console.log('Error page rendered');
+        // If failed, check error response structure
+        assert.ok(body.error, 'Should have error field on failure');
+        console.log('Error response:', body.error);
       }
     });
   });
@@ -57,11 +60,12 @@ describe('E2E Tests', () => {
         assert.ok(result.statusCode, 'Should have statusCode');
         assert.ok(result.body, 'Should have body');
 
-        // Verify HTML response
-        assert.ok(result.body.includes('<!DOCTYPE html>'), 'Should return HTML');
+        // Verify JSON response
+        const body = JSON.parse(result.body);
+        assert.ok(body.transfers || body.error, 'Should have transfers or error');
 
         console.log('Docker Lambda Response statusCode:', result.statusCode);
-        console.log('Docker Lambda Response body length:', result.body.length);
+        console.log('Docker Lambda Response:', body);
       } catch (error) {
         if (error.cause?.code === 'ECONNREFUSED') {
           console.log('Docker Lambda container not running, skipping E2E Docker test');

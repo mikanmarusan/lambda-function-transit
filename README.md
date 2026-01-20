@@ -17,21 +17,25 @@ AWS Lambda function that fetches train transit information from [Jorudan](https:
 # Install dependencies
 npm install
 
-# Start local Lambda container
-docker-compose up -d --build
+# Start development server
+docker-compose up api-dev
 ```
 
 ## Usage
 
-### Local Execution
+### Local Development
 
 ```bash
-# Via Docker
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+# Development server (recommended)
+docker-compose up api-dev
+# Access: http://localhost:8000/transit
+# Access: http://localhost:8000/status
 
 # Direct Node.js
 node -e "import { handler } from './src/index.mjs'; handler({}, {}).then(r => console.log(r.body));"
 ```
+
+> **Note**: `api-prod` service is for CI pipeline testing only. In production, the function runs on AWS Lambda.
 
 ### Running Tests
 

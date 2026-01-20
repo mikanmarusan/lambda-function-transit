@@ -10,19 +10,29 @@ AWS Lambda function that fetches train transit information from Jorudan (Japanes
 
 - **Runtime**: Node.js 22 (ESM)
 - **Entry point**: `src/index.mjs` → `handler(event, context)`
-- **API Gateway trigger**: GET `/transit`
+- **API Gateway trigger**: GET `/transit`, GET `/status`
 - **Region**: ap-northeast-1
 
 ## Build and Deploy
 
 ```bash
-# Local development with Docker
-docker-compose up -d --build
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+# Development environment (GET access via browser)
+docker-compose up api-dev
+# http://localhost:8000/transit - Transit information
+# http://localhost:8000/status  - Health check
+
+# Note: api-prod is for CI pipeline testing only.
+# In production, the function runs on AWS Lambda.
 
 # Run tests
-npm test                    # Unit tests
-npm run test:e2e           # E2E tests
+npm test                    # All tests
+npm run test:unit          # Unit tests only
+npm run test:e2e           # E2E tests only
+npm run test:coverage      # Tests with coverage
+
+# Lint
+npm run lint               # Check code style
+npm run lint:fix           # Auto-fix issues
 
 # SAM deployment
 sam build && sam deploy
@@ -51,7 +61,9 @@ Jorudan uses CloudFront with JavaScript redirect for bot detection. Simple fetch
 - **Structured logging**: JSON format for CloudWatch analysis
 
 ### Response Format
-Returns up to 2 transit candidates:
+Both endpoints return JSON:
+
+`GET /transit` returns:
 ```json
 {
   "transfers": [
@@ -61,13 +73,34 @@ Returns up to 2 transit candidates:
 }
 ```
 
+`GET /status` returns:
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-01-20T12:00:00.000Z"
+}
+```
+
 ## Files
 
 | File | Description |
 |------|-------------|
 | `src/index.mjs` | Lambda handler with cookie flow |
+| `src/dev-server.mjs` | Development HTTP server |
 | `src/lambda_function.py` | Original Python (reference only) |
 | `tests/handler.test.mjs` | Unit tests |
 | `tests/e2e.test.mjs` | E2E tests |
 | `template.yml` | SAM template |
-| `Dockerfile` | Lambda container image |
+| `samconfig.toml` | SAM deployment configuration |
+| `Dockerfile` | Multi-stage Docker image (dev/prod) |
+| `docker-compose.yml` | Docker services (api-dev/api-prod) |
+| `eslint.config.mjs` | ESLint configuration |
+
+## CI/CD
+
+| Workflow | Description |
+|----------|-------------|
+| `ci.yml` | Test, lint, security check, Docker build |
+| `deploy-production.yml` | Manual production deploy (requires confirmation) |
+| `claude.yml` | AI assistant integration |
+| `claude-code-review.yml` | AI code review |
