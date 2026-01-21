@@ -13,7 +13,7 @@ Globals:
       AllowMethods: "'GET,OPTIONS'"
 
 Resources:
-  transitmikanmarusan:
+  TransitFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ./src
@@ -41,7 +41,7 @@ Resources:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
               Resource:
-                - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/transitmikanmarusan:*'
+                - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-TransitFunction-*:*'
       RecursiveLoop: Terminate
       SnapStart:
         ApplyOn: None
@@ -68,6 +68,6 @@ Outputs:
 
   TransitFunctionArn:
     Description: Lambda function ARN
-    Value: !GetAtt transitmikanmarusan.Arn
+    Value: !GetAtt TransitFunction.Arn
     Export:
       Name: !Sub '${AWS::StackName}-lambda-arn'
