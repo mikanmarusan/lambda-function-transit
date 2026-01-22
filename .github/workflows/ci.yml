@@ -7,7 +7,7 @@ on:
     branches: ['*']
 
 jobs:
-  test:
+  test-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +19,24 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  test-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
@@ -27,6 +45,10 @@ jobs:
         run: docker build --target development -t transit-dev .
       - name: Build production image
         run: docker build --target production -t transit-prod .
+      - name: Build frontend development image
+        run: docker build --target development -t transit-frontend-dev ./frontend
+      - name: Build frontend production image
+        run: docker build --target builder -t transit-frontend-build ./frontend
       - name: Smoke test
         run: |
           docker run -d -p 8000:8000 --name dev-test transit-dev
@@ -45,3 +67,8 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm audit --audit-level=high
+      - name: Frontend security check
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high

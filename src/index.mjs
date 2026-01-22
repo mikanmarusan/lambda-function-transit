@@ -229,13 +229,23 @@ function createJsonResponse(statusCode, data) {
 }
 
 /**
+ * Normalize path by removing /api prefix if present
+ * @param {string} path - Request path
+ * @returns {string} Normalized path
+ */
+function normalizePath(path) {
+  return path.replace(/^\/api/, '') || '/';
+}
+
+/**
  * Lambda handler function
  * @param {Object} event - Lambda event object
  * @param {Object} _context - Lambda context object
  * @returns {Object} Response with transit information
  */
 export async function handler(event, _context) {
-  const path = event.path || event.rawPath || '/transit';
+  const rawPath = event.path || event.rawPath || '/transit';
+  const path = normalizePath(rawPath);
 
   // Health check endpoint
   if (path === '/status') {

@@ -4,38 +4,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AWS Lambda function that fetches train transit information from Jorudan (Japanese transit service). Deployed using AWS SAM.
+AWS Lambda function that fetches train transit information from Jorudan (Japanese transit service). Includes a React frontend deployed via CloudFront + S3. Deployed using AWS SAM.
 
 ## Architecture
 
-- **Runtime**: Node.js 22 (ESM)
+```
+CloudFront + S3 (Frontend) → API Gateway → Lambda → Jorudan
+```
+
+- **Backend Runtime**: Node.js 22 (ESM)
+- **Frontend**: React 19 + TypeScript + Vite
 - **Entry point**: `src/index.mjs` → `handler(event, context)`
-- **API Gateway trigger**: GET `/transit`, GET `/status`
+- **API Gateway trigger**: GET `/transit`, GET `/status`, GET `/api/transit`, GET `/api/status`
 - **Region**: ap-northeast-1
 
 ## Build and Deploy
 
 ```bash
-# Development environment (GET access via browser)
-docker-compose up api-dev
-# http://localhost:8000/transit - Transit information
-# http://localhost:8000/status  - Health check
+# Development environment (Docker)
+docker-compose up                  # API + Frontend together
+docker-compose up api-dev          # API only: http://localhost:8000
+docker-compose up frontend-dev     # Frontend only: http://localhost:3000
 
-# Note: api-prod is for CI pipeline testing only.
-# In production, the function runs on AWS Lambda.
+# Frontend development URLs
+# http://localhost:3000           - React frontend (HMR enabled)
+# http://localhost:3000/api/transit - Proxied to API
+# http://localhost:3000/api/status  - Proxied to API
 
-# Run tests
+# Backend development URLs
+# http://localhost:8000/transit   - Transit information
+# http://localhost:8000/status    - Health check
+
+# Run backend tests
 npm test                    # All tests
 npm run test:unit          # Unit tests only
 npm run test:e2e           # E2E tests only
 npm run test:coverage      # Tests with coverage
 
-# Lint
-npm run lint               # Check code style
-npm run lint:fix           # Auto-fix issues
+# Run frontend tests
+cd frontend
+npm test                   # Unit tests
+npm run test:watch         # Watch mode
+npx playwright test        # E2E tests
 
-# SAM deployment
+# Lint
+npm run lint               # Backend lint
+cd frontend && npm run lint # Frontend lint
+
+# SAM deployment (includes CloudFront + S3)
 sam build && sam deploy
+
+# Frontend deployment (after SAM deploy)
+cd frontend && npm run build
+aws s3 sync dist/ s3://<bucket-name>/
+aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 ```
 
 ## Key Implementation Notes
@@ -60,10 +82,15 @@ Jorudan uses CloudFront with JavaScript redirect for bot detection. Simple fetch
 - **SSRF protection**: `safeJoinUrl()` validates redirect paths (blocks `//` and `://`)
 - **Structured logging**: JSON format for CloudWatch analysis
 
+### API Path Normalization
+The Lambda handler normalizes paths to support both direct API Gateway access and CloudFront-proxied access:
+- `/transit` and `/api/transit` → handled as transit endpoint
+- `/status` and `/api/status` → handled as status endpoint
+
 ### Response Format
 Both endpoints return JSON:
 
-`GET /transit` returns:
+`GET /transit` or `GET /api/transit` returns:
 ```json
 {
   "transfers": [
@@ -73,7 +100,7 @@ Both endpoints return JSON:
 }
 ```
 
-`GET /status` returns:
+`GET /status` or `GET /api/status` returns:
 ```json
 {
   "status": "ok",
@@ -83,6 +110,7 @@ Both endpoints return JSON:
 
 ## Files
 
+### Backend
 | File | Description |
 |------|-------------|
 | `src/index.mjs` | Lambda handler with cookie flow |
@@ -90,17 +118,38 @@ Both endpoints return JSON:
 | `src/lambda_function.py` | Original Python (reference only) |
 | `tests/handler.test.mjs` | Unit tests |
 | `tests/e2e.test.mjs` | E2E tests |
-| `template.yml` | SAM template |
+| `template.yml` | SAM template (Lambda + CloudFront + S3) |
 | `samconfig.toml` | SAM deployment configuration |
 | `Dockerfile` | Multi-stage Docker image (dev/prod) |
-| `docker-compose.yml` | Docker services (api-dev/api-prod) |
+| `docker-compose.yml` | Docker services (api-dev/api-prod/frontend-dev) |
 | `eslint.config.mjs` | ESLint configuration |
+
+### Frontend
+| File | Description |
+|------|-------------|
+| `frontend/src/App.tsx` | Main application component |
+| `frontend/src/components/TransitCard.tsx` | Transit info card |
+| `frontend/src/components/RouteDetail.tsx` | Route details |
+| `frontend/src/components/StatusIndicator.tsx` | API status display |
+| `frontend/src/hooks/useTransit.ts` | Data fetching hook |
+| `frontend/src/types/transit.ts` | TypeScript types |
+| `frontend/vite.config.ts` | Vite configuration |
+| `frontend/Dockerfile` | Frontend Docker image |
+| `frontend/tests/` | Unit tests (Vitest) |
+| `frontend/tests/e2e/` | E2E tests (Playwright) |
 
 ## CI/CD
 
 | Workflow | Description |
 |----------|-------------|
-| `ci.yml` | Test, lint, security check, Docker build |
-| `deploy-production.yml` | Manual production deploy (requires confirmation) |
+| `ci.yml` | Test backend/frontend, lint, security check, Docker build |
+| `deploy-production.yml` | Manual production deploy with frontend S3 sync |
 | `claude.yml` | AI assistant integration |
 | `claude-code-review.yml` | AI code review |
+
+## Frontend Design
+
+- **Theme**: Dark mode (Linear/Raycast inspired)
+- **Design System**: 4px grid, border-based depth
+- **Icons**: Phosphor Icons
+- **Typography**: Inter (sans), SF Mono (mono)
