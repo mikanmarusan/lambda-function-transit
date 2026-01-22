@@ -113,7 +113,7 @@ jobs:
       - name: Health Check - API
         if: ${{ github.event.inputs.dry-run != 'true' }}
         run: |
-          curl -f "${{ steps.stack-outputs.outputs.api_endpoint }}/status" || exit 1
+          curl -f "${{ steps.stack-outputs.outputs.api_endpoint }}/api/status" || exit 1
 
       - name: Health Check - Frontend
         if: ${{ github.event.inputs.dry-run != 'true' }}

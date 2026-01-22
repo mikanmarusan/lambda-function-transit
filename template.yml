@@ -48,19 +48,9 @@ Resources:
         Transit:
           Type: Api
           Properties:
-            Path: /transit
-            Method: GET
-        TransitWithApiPrefix:
-          Type: Api
-          Properties:
             Path: /api/transit
             Method: GET
         Status:
-          Type: Api
-          Properties:
-            Path: /status
-            Method: GET
-        StatusWithApiPrefix:
           Type: Api
           Properties:
             Path: /api/status
