@@ -15,7 +15,7 @@ CloudFront + S3 (Frontend) → API Gateway → Lambda → Jorudan
 - **Backend Runtime**: Node.js 22 (ESM)
 - **Frontend**: React 19 + TypeScript + Vite
 - **Entry point**: `src/index.mjs` → `handler(event, context)`
-- **API Gateway trigger**: GET `/transit`, GET `/status`, GET `/api/transit`, GET `/api/status`
+- **API Gateway trigger**: GET `/api/transit`, GET `/api/status`
 - **Region**: ap-northeast-1
 
 ## Build and Deploy

@@ -57,7 +57,7 @@ sam deploy
 
 ## API Specification
 
-**Endpoint**: `GET /transit`
+**Endpoint**: `GET /api/transit` (CloudFront) or `GET /transit` (dev server)
 
 **Response** (up to 2 transit candidates):
 ```json
@@ -80,14 +80,20 @@ sam deploy
 ```
 src/
 ├── index.mjs          # Lambda handler
+├── dev-server.mjs     # Development server
 ├── package.json       # Dependencies
 └── lambda_function.py # Original Python (reference)
 tests/
 ├── handler.test.mjs   # Unit tests
 └── e2e.test.mjs       # E2E tests
+frontend/              # React frontend
+├── src/               # Source code
+├── tests/             # Tests
+└── package.json       # Dependencies
+.github/workflows/     # CI/CD
 Dockerfile             # Lambda container image
 docker-compose.yml     # Local development
-template.yml           # SAM template
+template.yml           # SAM template (Lambda + CloudFront + S3)
 ```
 
 ## Notes
