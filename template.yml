@@ -1,18 +1,17 @@
-# この AWS SAM テンプレートは、関数の設定から生成されました。関数に 1 つ以上のトリガーがある場合は、これらのトリガーに関連付けられている AWS
-# リソースがこのテンプレートで完全に指定されておらず、プレースホルダ値も含まれていないことに注意してください。AWS Infrastructure
-# Composer またはお気に入りの IDE でこのテンプレートを開き、他の AWS リソースでサーバーレスアプリケーションを指定するように変更します。
+# AWS SAM template for Transit application with CloudFront + S3 frontend
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: An AWS Serverless Application Model template describing your function.
+Description: Transit app with Lambda API and CloudFront + S3 frontend
 
 Globals:
   Api:
     Cors:
       AllowOrigin: "'*'"
-      AllowHeaders: "'Content-Type,Authorization'"
+      AllowHeaders: "'Content-Type'"
       AllowMethods: "'GET,OPTIONS'"
 
 Resources:
+  # Lambda Function
   TransitFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -46,18 +45,139 @@ Resources:
       SnapStart:
         ApplyOn: None
       Events:
-        Api1:
+        Transit:
           Type: Api
           Properties:
             Path: /transit
+            Method: GET
+        TransitWithApiPrefix:
+          Type: Api
+          Properties:
+            Path: /api/transit
             Method: GET
         Status:
           Type: Api
           Properties:
             Path: /status
             Method: GET
+        StatusWithApiPrefix:
+          Type: Api
+          Properties:
+            Path: /api/status
+            Method: GET
       RuntimeManagementConfig:
         UpdateRuntimeOn: Auto
+
+  # S3 Bucket for Frontend
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-frontend-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # S3 Bucket Policy for CloudFront OAC
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+  # CloudFront Origin Access Control
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        Comment: !Sub '${AWS::StackName} Frontend Distribution'
+
+        Origins:
+          # S3 Origin for static files
+          - Id: S3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !Ref CloudFrontOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+
+          # API Gateway Origin
+          - Id: ApiOrigin
+            DomainName: !Sub '${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+            OriginPath: /Prod
+
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
+
+        CacheBehaviors:
+          # API routes
+          - PathPattern: /api/*
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
+
+        CustomErrorResponses:
+          # SPA routing: redirect 404/403 to index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
 
 Outputs:
   ApiEndpoint:
@@ -71,3 +191,21 @@ Outputs:
     Value: !GetAtt TransitFunction.Arn
     Export:
       Name: !Sub '${AWS::StackName}-lambda-arn'
+
+  FrontendUrl:
+    Description: CloudFront distribution URL for frontend
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-frontend-url'
+
+  FrontendBucketName:
+    Description: S3 bucket name for frontend assets
+    Value: !Ref FrontendBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-frontend-bucket'
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub '${AWS::StackName}-cloudfront-id'

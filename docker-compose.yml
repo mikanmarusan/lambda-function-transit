@@ -9,6 +9,8 @@ services:
       - "8000:8000"
     volumes:
       - ./src:/app
+    networks:
+      - transit-network
 
   # Production-like environment (Lambda Runtime API)
   api-prod:
@@ -20,3 +22,26 @@ services:
       - "9000:8080"
     environment:
       - AWS_LAMBDA_FUNCTION_TIMEOUT=10
+
+  # Frontend development server
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://api-dev:8000
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - api-dev
+    networks:
+      - transit-network
+
+networks:
+  transit-network:
+    driver: bridge
