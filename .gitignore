@@ -143,3 +143,7 @@ vite.config.ts.timestamp-*
 
 # AWS SAM build output
 .aws-sam/
+
+# Plan files (Claude Code temporary working documents)
+.plans/*
+!.plans/.gitkeep
