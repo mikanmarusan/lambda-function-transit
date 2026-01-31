@@ -1,0 +1,205 @@
+<mxfile host="app.diagrams.net" modified="2026-01-29T00:00:00.000Z" agent="Claude Code" etag="aws-architecture" version="24.0.0" type="device">
+  <diagram name="AWS Architecture" id="aws-architecture-diagram">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- AWS Region Boundary -->
+        <mxCell id="region-boundary" value="" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=5 5;strokeColor=#FF9900;strokeWidth=2;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="280" y="120" width="700" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="region-label" value="AWS Region: ap-northeast-1 (Tokyo)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=14;fontColor=#FF9900;" vertex="1" parent="1">
+          <mxGeometry x="290" y="130" width="250" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- User Browser -->
+        <mxCell id="user-browser" value="" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#232F3E;fillColor=#232F3E;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.user;" vertex="1" parent="1">
+          <mxGeometry x="80" y="340" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="user-label" value="User Browser" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="59" y="420" width="120" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- CloudFront Distribution -->
+        <mxCell id="cloudfront" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;" vertex="1" parent="1">
+          <mxGeometry x="320" y="340" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="cloudfront-label" value="CloudFront&#xa;Distribution&#xa;(HTTP/2, PriceClass_200)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="289" y="420" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- S3 Bucket -->
+        <mxCell id="s3-bucket" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="1">
+          <mxGeometry x="520" y="500" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="s3-label" value="S3 Bucket&#xa;(Frontend Assets)&#xa;Private, AES256" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="489" y="580" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- CloudFront OAC -->
+        <mxCell id="oac" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management_iam;" vertex="1" parent="1">
+          <mxGeometry x="420" y="500" width="60" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="oac-label" value="OAC&#xa;(SigV4)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="405" y="560" width="90" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- API Gateway -->
+        <mxCell id="api-gateway" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;" vertex="1" parent="1">
+          <mxGeometry x="520" y="200" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="api-gateway-label" value="API Gateway&#xa;(REST API)&#xa;GET /api/transit&#xa;GET /api/status" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="489" y="280" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Lambda Function -->
+        <mxCell id="lambda" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
+          <mxGeometry x="720" y="200" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="lambda-label" value="Lambda Function&#xa;(Node.js 22)&#xa;128MB, 10s timeout" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="689" y="280" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- CloudWatch Logs -->
+        <mxCell id="cloudwatch" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;" vertex="1" parent="1">
+          <mxGeometry x="860" y="340" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="cloudwatch-label" value="CloudWatch&#xa;Logs" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="839" y="420" width="120" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- IAM Role -->
+        <mxCell id="iam-role" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management_iam;" vertex="1" parent="1">
+          <mxGeometry x="860" y="500" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="iam-label" value="IAM Role&#xa;(Lambda Execution)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="829" y="580" width="140" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Jorudan External API -->
+        <mxCell id="jorudan" value="" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#232F3E;fillColor=#232F3E;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.external_sdk;" vertex="1" parent="1">
+          <mxGeometry x="720" y="40" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="jorudan-label" value="Jorudan API&#xa;(External Transit Service)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="669" y="10" width="180" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Connection: User to CloudFront -->
+        <mxCell id="conn-user-cf" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#232F3E;" edge="1" parent="1" source="user-browser" target="cloudfront">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="170" y="380" as="sourcePoint" />
+            <mxPoint x="310" y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-user-cf-label" value="HTTPS" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-user-cf">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="5" y="-11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: CloudFront to API Gateway -->
+        <mxCell id="conn-cf-apigw" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#E7157B;exitX=0.75;exitY=0;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="1" source="cloudfront" target="api-gateway">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="400" y="350" as="sourcePoint" />
+            <mxPoint x="520" y="270" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="379" y="239" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-cf-apigw-label" value="/api/*" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-cf-apigw">
+          <mxGeometry x="-0.2" y="-1" relative="1" as="geometry">
+            <mxPoint x="-15" y="-11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: CloudFront to S3 via OAC -->
+        <mxCell id="conn-cf-oac" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#7AA116;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="1" source="cloudfront" target="oac">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="359" y="430" as="sourcePoint" />
+            <mxPoint x="440" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-cf-oac-label" value="Static files" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-cf-oac">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="-35" y="11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: OAC to S3 -->
+        <mxCell id="conn-oac-s3" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#7AA116;" edge="1" parent="1" source="oac" target="s3-bucket">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="480" y="530" as="sourcePoint" />
+            <mxPoint x="520" y="530" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: API Gateway to Lambda -->
+        <mxCell id="conn-apigw-lambda" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#ED7100;" edge="1" parent="1" source="api-gateway" target="lambda">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="610" y="239" as="sourcePoint" />
+            <mxPoint x="710" y="239" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-apigw-lambda-label" value="Invoke" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-apigw-lambda">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint y="-11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: Lambda to Jorudan -->
+        <mxCell id="conn-lambda-jorudan" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#232F3E;dashed=1;" edge="1" parent="1" source="lambda" target="jorudan">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="759" y="200" as="sourcePoint" />
+            <mxPoint x="759" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-lambda-jorudan-label" value="HTTPS&#xa;(Transit Data)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-lambda-jorudan">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="41" y="4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: Lambda to CloudWatch -->
+        <mxCell id="conn-lambda-cw" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#E7157B;dashed=1;" edge="1" parent="1" source="lambda" target="cloudwatch">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="798" y="270" as="sourcePoint" />
+            <mxPoint x="860" y="340" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="820" y="279" />
+              <mxPoint x="899" y="279" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-lambda-cw-label" value="Logs" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-lambda-cw">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="20" y="11" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connection: Lambda to IAM Role -->
+        <mxCell id="conn-lambda-iam" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#DD344C;dashed=1;" edge="1" parent="1" source="lambda" target="iam-role">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="780" y="290" as="sourcePoint" />
+            <mxPoint x="860" y="500" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="780" y="539" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="conn-lambda-iam-label" value="Assume Role" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontStyle=1;fontSize=10;" vertex="1" connectable="0" parent="conn-lambda-iam">
+          <mxGeometry x="-0.1" y="1" relative="1" as="geometry">
+            <mxPoint x="-41" y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Title -->
+        <mxCell id="title" value="Lambda Function Transit - AWS Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=18;" vertex="1" parent="1">
+          <mxGeometry x="350" y="670" width="400" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
