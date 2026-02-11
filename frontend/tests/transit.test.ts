@@ -84,4 +84,19 @@ describe('parseRoute', () => {
     expect(result[0].station).toBe('駅A')
     expect(result[0].line).toBeNull()
   })
+
+  it('should parse route with intermediate transfer stations (◇)', () => {
+    const route = '■六本木一丁目 1番線発\n｜東京メトロ南北線(浦和美園行) 3.1km\n◇永田町 3番線着・1番線発 ［乗換4分+待ち4分］\n｜東京メトロ半蔵門線(中央林間行) 5.7km\n◇渋谷 1番線着・1番線発 ［乗換6分+待ち4分］\n｜京王井の頭線(吉祥寺行) 12.5km\n■つつじヶ丘（東京） 1・2番線着'
+    const result = parseRoute(route)
+
+    expect(result).toHaveLength(4)
+    expect(result[0].station).toBe('六本木一丁目 1番線発')
+    expect(result[0].line).toBe('東京メトロ南北線(浦和美園行) 3.1km')
+    expect(result[1].station).toBe('永田町 3番線着・1番線発 ［乗換4分+待ち4分］')
+    expect(result[1].line).toBe('東京メトロ半蔵門線(中央林間行) 5.7km')
+    expect(result[2].station).toBe('渋谷 1番線着・1番線発 ［乗換6分+待ち4分］')
+    expect(result[2].line).toBe('京王井の頭線(吉祥寺行) 12.5km')
+    expect(result[3].station).toBe('つつじヶ丘（東京） 1・2番線着')
+    expect(result[3].line).toBeNull()
+  })
 })

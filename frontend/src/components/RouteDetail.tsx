@@ -16,23 +16,31 @@ export function RouteDetail({ route }: RouteDetailProps) {
     )
   }
 
+  const isTerminal = (index: number) =>
+    index === 0 || index === stations.length - 1
+
   return (
     <div className={styles.container}>
       <div className={styles.timeline}>
-        {stations.map((item, index) => (
-          <div key={index} className={styles.stop}>
-            <div className={styles.marker}>
-              <div className={styles.dot} />
-              {index < stations.length - 1 && <div className={styles.line} />}
+        {stations.map((item, index) => {
+          const terminal = isTerminal(index)
+          return (
+            <div key={index} className={terminal ? styles.stop : styles.stopIntermediate}>
+              <div className={styles.marker}>
+                <div className={terminal ? styles.dotTerminal : styles.dotTransfer} />
+                {index < stations.length - 1 && <div className={styles.line} />}
+              </div>
+              <div className={terminal ? styles.content : styles.contentIntermediate}>
+                <span className={terminal ? styles.station : styles.stationIntermediate}>
+                  {item.station}
+                </span>
+                {item.line && (
+                  <span className={styles.lineName}>{item.line}</span>
+                )}
+              </div>
             </div>
-            <div className={styles.content}>
-              <span className={styles.station}>{item.station}</span>
-              {item.line && (
-                <span className={styles.lineName}>{item.line}</span>
-              )}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

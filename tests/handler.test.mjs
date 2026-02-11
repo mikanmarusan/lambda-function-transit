@@ -2,14 +2,14 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { getSummary, getRoute, splitRoutes, handler } from '../src/index.mjs';
 
-// Mock HTML block similar to Jorudan's response
-const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n六本木一丁目\r\n｜ 　東京メトロ南北線\r\n永田町\r\n｜ 　東京メトロ半蔵門線\r\n渋谷\r\n｜ 　京王井の頭線\r\nつつじヶ丘（東京）`;
+// Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
+const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
 
 // Second mock block for multiple candidates testing
-const mockBlock2 = `発着時間：07:00～09:00\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n新宿\r\n｜ 　京王線\r\nつつじヶ丘（東京）`;
+const mockBlock2 = `発着時間：07:00～09:00\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n■新宿    1番線発\r\n｜ 　京王線(京王八王子行)   12.5km\r\n｜07:00-07:20［20分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
 
 // Third mock block for MAX_CANDIDATES testing
-const mockBlock3 = `発着時間：08:00～10:00\r\n所要時間：2時間\r\n乗換回数：0回\r\n\r\n渋谷\r\n｜ 　京王井の頭線\r\n明大前`;
+const mockBlock3 = `発着時間：08:00～10:00\r\n所要時間：2時間\r\n乗換回数：0回\r\n\r\n■渋谷    1番線発\r\n｜ 　京王井の頭線(吉祥寺行)   4.9km\r\n｜08:00-08:10［10分］\r\n■明大前    1番線着`;
 
 // Combined blocks for multiple candidates
 const mockMultipleBlocks = `${mockBlock}${mockBlock2}`;
@@ -88,14 +88,39 @@ describe('getSummary', () => {
 });
 
 describe('getRoute', () => {
-  it('should extract route information', () => {
+  it('should extract terminal stations', () => {
     const route = getRoute(mockBlock);
-    assert.ok(route.includes('六本木一丁目'), 'Should contain start station');
-    assert.ok(route.includes('つつじヶ丘（東京）'), 'Should contain end station');
+    assert.ok(route.includes('■六本木一丁目'), 'Should contain start station');
+    assert.ok(route.includes('■つつじヶ丘（東京）'), 'Should contain end station');
+  });
+
+  it('should preserve intermediate transfer stations (◇)', () => {
+    const route = getRoute(mockBlock);
+    assert.ok(route.includes('◇永田町'), 'Should contain transfer station 永田町');
+    assert.ok(route.includes('◇渋谷'), 'Should contain transfer station 渋谷');
+  });
+
+  it('should keep line names and filter out times, fares, arrows', () => {
+    const route = getRoute(mockBlock);
+    // Line names should be kept
+    assert.ok(route.includes('東京メトロ南北線'), 'Should contain line name');
+    assert.ok(route.includes('東京メトロ半蔵門線'), 'Should contain line name');
+    assert.ok(route.includes('京王井の頭線'), 'Should contain line name');
+    // Times, fares, arrows should be filtered out
+    assert.ok(!route.includes('06:30-06:36'), 'Should not contain time info');
+    assert.ok(!route.includes('178円'), 'Should not contain fare info');
+    assert.ok(!route.includes('↓'), 'Should not contain arrow');
+  });
+
+  it('should produce correct number of lines for multi-transfer route', () => {
+    const route = getRoute(mockBlock);
+    const lines = route.split('\n');
+    // 4 stations (■x2 + ◇x2) + 3 line names = 7 lines
+    assert.strictEqual(lines.length, 7, 'Should have 7 lines (4 stations + 3 line names)');
   });
 
   it('should remove extra spaces from separator', () => {
-    const blockWithSpaces = `summary\r\n\r\n六本木一丁目\r\n｜ 　test`;
+    const blockWithSpaces = `summary\r\n\r\n■六本木一丁目\r\n｜ 　test`;
     const route = getRoute(blockWithSpaces);
     assert.ok(!route.includes('｜ 　'), 'Should not contain "｜ 　"');
   });
