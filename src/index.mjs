@@ -55,9 +55,17 @@ export function getRoute(block) {
   const route = block.trim().split(/\r?\n\r?\n/)[1] || '';
 
   return route
-    .replace(/｜ 　/g, '｜')           // Remove extra spacing after separator
-    .replace(/\s+$/gm, '')             // Remove trailing spaces from each line
-    .replace(/\s{2,}(.*)$/gm, '');     // Remove lines with 2+ leading spaces
+    .replace(/｜ 　/g, '｜')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => {
+      if (line.startsWith('■') || line.startsWith('◇')) return true;
+      if (!line.startsWith('｜')) return false;
+      const content = line.slice(1).trim();
+      // Keep only line names (filter out times, fares, and arrows)
+      return content !== '' && !/^[\d↓↑]/.test(content);
+    })
+    .join('\n');
 }
 
 /**

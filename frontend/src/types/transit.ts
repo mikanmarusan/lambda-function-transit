@@ -50,8 +50,8 @@ export function parseRoute(route: string): { station: string; line: string | nul
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (line.startsWith('■')) {
-      const station = line.replace(/^■/, '').trim()
+    if (line.startsWith('■') || line.startsWith('◇')) {
+      const station = line.replace(/^[■◇]/, '').trim()
       const nextLine = lines[i + 1]
       const lineName = nextLine?.startsWith('｜') ? nextLine.replace(/^｜/, '').trim() : null
       result.push({ station, line: lineName })

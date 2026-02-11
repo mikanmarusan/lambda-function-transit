@@ -15,6 +15,12 @@
   min-height: 40px;
 }
 
+.stopIntermediate {
+  display: flex;
+  gap: var(--space-3);
+  min-height: 32px;
+}
+
 .marker {
   display: flex;
   flex-direction: column;
@@ -23,13 +29,25 @@
   flex-shrink: 0;
 }
 
-.dot {
+.dotTerminal {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background-color: var(--accent-blue);
   flex-shrink: 0;
   margin-top: 4px;
+  box-sizing: border-box;
+}
+
+.dotTransfer {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 2px solid var(--accent-blue);
+  flex-shrink: 0;
+  margin-top: 4px;
+  box-sizing: border-box;
 }
 
 .line {
@@ -46,15 +64,30 @@
   padding-bottom: var(--space-2);
 }
 
+.contentIntermediate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--space-1);
+}
+
 .station {
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
 }
 
+.stationIntermediate {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .lineName {
   color: var(--text-tertiary);
   font-size: 11px;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--border-secondary);
 }
 
 .rawRoute {
