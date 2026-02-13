@@ -55,6 +55,7 @@ export function parseRoute(route: string): { station: string; line: string | nul
       const nextLine = lines[i + 1]
       const lineName = nextLine?.startsWith('｜') ? nextLine.replace(/^｜/, '').trim() : null
       result.push({ station, line: lineName })
+      if (lineName !== null) i++
     }
   }
 
