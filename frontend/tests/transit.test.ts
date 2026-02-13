@@ -54,6 +54,36 @@ describe('parseSummary', () => {
     expect(result.duration).toBe('--')
     expect(result.transfers).toBe('--')
   })
+
+  it('should parse tilde format with hours and minutes duration', () => {
+    const summary = '06:30～08:45(2時間15分)(2回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('06:30')
+    expect(result.arrivalTime).toBe('08:45')
+    expect(result.duration).toBe('2時間15分')
+    expect(result.transfers).toBe('2回')
+  })
+
+  it('should parse tilde format with hours-only duration', () => {
+    const summary = '06:30～08:30(2時間)(1回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('06:30')
+    expect(result.arrivalTime).toBe('08:30')
+    expect(result.duration).toBe('2時間')
+    expect(result.transfers).toBe('1回')
+  })
+
+  it('should parse tilde format with minutes-only duration', () => {
+    const summary = '18:00～18:45(45分)(0回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('18:00')
+    expect(result.arrivalTime).toBe('18:45')
+    expect(result.duration).toBe('45分')
+    expect(result.transfers).toBe('0回')
+  })
 })
 
 describe('parseRoute', () => {
@@ -64,10 +94,13 @@ describe('parseRoute', () => {
     expect(result).toHaveLength(3)
     expect(result[0].station).toBe('六本木一丁目')
     expect(result[0].line).toBe('東京メトロ南北線')
+    expect(result[0].isTerminal).toBe(true)
     expect(result[1].station).toBe('溜池山王')
     expect(result[1].line).toBe('東京メトロ銀座線')
+    expect(result[1].isTerminal).toBe(true)
     expect(result[2].station).toBe('渋谷')
     expect(result[2].line).toBeNull()
+    expect(result[2].isTerminal).toBe(true)
   })
 
   it('should handle empty route', () => {
@@ -83,6 +116,8 @@ describe('parseRoute', () => {
     expect(result).toHaveLength(2)
     expect(result[0].station).toBe('駅A')
     expect(result[0].line).toBeNull()
+    expect(result[0].isTerminal).toBe(true)
+    expect(result[1].isTerminal).toBe(true)
   })
 
   it('should parse route with intermediate transfer stations (◇)', () => {
@@ -92,11 +127,26 @@ describe('parseRoute', () => {
     expect(result).toHaveLength(4)
     expect(result[0].station).toBe('六本木一丁目 1番線発')
     expect(result[0].line).toBe('東京メトロ南北線(浦和美園行) 3.1km')
+    expect(result[0].isTerminal).toBe(true)
     expect(result[1].station).toBe('永田町 3番線着・1番線発 ［乗換4分+待ち4分］')
     expect(result[1].line).toBe('東京メトロ半蔵門線(中央林間行) 5.7km')
+    expect(result[1].isTerminal).toBe(false)
     expect(result[2].station).toBe('渋谷 1番線着・1番線発 ［乗換6分+待ち4分］')
     expect(result[2].line).toBe('京王井の頭線(吉祥寺行) 12.5km')
+    expect(result[2].isTerminal).toBe(false)
     expect(result[3].station).toBe('つつじヶ丘（東京） 1・2番線着')
     expect(result[3].line).toBeNull()
+    expect(result[3].isTerminal).toBe(true)
+  })
+
+  it('should mark all ◇ stations as non-terminal', () => {
+    const route = '◇駅A\n｜路線X\n◇駅B'
+    const result = parseRoute(route)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].station).toBe('駅A')
+    expect(result[0].isTerminal).toBe(false)
+    expect(result[1].station).toBe('駅B')
+    expect(result[1].isTerminal).toBe(false)
   })
 })

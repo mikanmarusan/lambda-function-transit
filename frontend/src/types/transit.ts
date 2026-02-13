@@ -32,8 +32,8 @@ export function parseSummary(summary: string): {
   duration: string
   transfers: string
 } {
-  const timeMatch = summary.match(/(\d{1,2}:\d{2})発\s*→\s*(\d{1,2}:\d{2})着/)
-  const durationMatch = summary.match(/\((\d+分)\)/)
+  const timeMatch = summary.match(/(\d{1,2}:\d{2})(?:発\s*→\s*|～)(\d{1,2}:\d{2})(?:着)?/)
+  const durationMatch = summary.match(/\((\d+時間\d+分|\d+時間|\d+分)\)/)
   const transfersMatch = summary.match(/\((\d+回)\)/)
 
   return {
@@ -44,9 +44,9 @@ export function parseSummary(summary: string): {
   }
 }
 
-export function parseRoute(route: string): { station: string; line: string | null }[] {
+export function parseRoute(route: string): { station: string; line: string | null; isTerminal: boolean }[] {
   const lines = route.split('\n').filter(line => line.trim())
-  const result: { station: string; line: string | null }[] = []
+  const result: { station: string; line: string | null; isTerminal: boolean }[] = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -54,7 +54,9 @@ export function parseRoute(route: string): { station: string; line: string | nul
       const station = line.replace(/^[■◇]/, '').trim()
       const nextLine = lines[i + 1]
       const lineName = nextLine?.startsWith('｜') ? nextLine.replace(/^｜/, '').trim() : null
-      result.push({ station, line: lineName })
+      const isTerminal = line.startsWith('■')
+      result.push({ station, line: lineName, isTerminal })
+      if (lineName !== null) i++
     }
   }
 
