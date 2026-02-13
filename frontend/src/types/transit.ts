@@ -44,9 +44,9 @@ export function parseSummary(summary: string): {
   }
 }
 
-export function parseRoute(route: string): { station: string; line: string | null }[] {
+export function parseRoute(route: string): { station: string; line: string | null; isTerminal: boolean }[] {
   const lines = route.split('\n').filter(line => line.trim())
-  const result: { station: string; line: string | null }[] = []
+  const result: { station: string; line: string | null; isTerminal: boolean }[] = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -54,7 +54,8 @@ export function parseRoute(route: string): { station: string; line: string | nul
       const station = line.replace(/^[■◇]/, '').trim()
       const nextLine = lines[i + 1]
       const lineName = nextLine?.startsWith('｜') ? nextLine.replace(/^｜/, '').trim() : null
-      result.push({ station, line: lineName })
+      const isTerminal = line.startsWith('■')
+      result.push({ station, line: lineName, isTerminal })
       if (lineName !== null) i++
     }
   }

@@ -16,14 +16,11 @@ export function RouteDetail({ route }: RouteDetailProps) {
     )
   }
 
-  const isTerminal = (index: number) =>
-    index === 0 || index === stations.length - 1
-
   return (
     <div className={styles.container}>
       <div className={styles.timeline}>
         {stations.map((item, index) => {
-          const terminal = isTerminal(index)
+          const terminal = item.isTerminal
           return (
             <div key={index} className={terminal ? styles.stop : styles.stopIntermediate}>
               <div className={styles.marker}>
