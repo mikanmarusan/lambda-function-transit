@@ -54,6 +54,36 @@ describe('parseSummary', () => {
     expect(result.duration).toBe('--')
     expect(result.transfers).toBe('--')
   })
+
+  it('should parse tilde format with hours and minutes duration', () => {
+    const summary = '06:30～08:45(2時間15分)(2回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('06:30')
+    expect(result.arrivalTime).toBe('08:45')
+    expect(result.duration).toBe('2時間15分')
+    expect(result.transfers).toBe('2回')
+  })
+
+  it('should parse tilde format with hours-only duration', () => {
+    const summary = '06:30～08:30(2時間)(1回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('06:30')
+    expect(result.arrivalTime).toBe('08:30')
+    expect(result.duration).toBe('2時間')
+    expect(result.transfers).toBe('1回')
+  })
+
+  it('should parse tilde format with minutes-only duration', () => {
+    const summary = '18:00～18:45(45分)(0回)'
+    const result = parseSummary(summary)
+
+    expect(result.departureTime).toBe('18:00')
+    expect(result.arrivalTime).toBe('18:45')
+    expect(result.duration).toBe('45分')
+    expect(result.transfers).toBe('0回')
+  })
 })
 
 describe('parseRoute', () => {

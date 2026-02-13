@@ -32,8 +32,8 @@ export function parseSummary(summary: string): {
   duration: string
   transfers: string
 } {
-  const timeMatch = summary.match(/(\d{1,2}:\d{2})発\s*→\s*(\d{1,2}:\d{2})着/)
-  const durationMatch = summary.match(/\((\d+分)\)/)
+  const timeMatch = summary.match(/(\d{1,2}:\d{2})(?:発\s*→\s*|～)(\d{1,2}:\d{2})(?:着)?/)
+  const durationMatch = summary.match(/\((\d+時間\d+分|\d+時間|\d+分)\)/)
   const transfersMatch = summary.match(/\((\d+回)\)/)
 
   return {
