@@ -2,25 +2,57 @@ import { describe, it, expect } from 'vitest'
 import { parseTransitResponse, parseSummary, parseRoute } from '../src/types/transit'
 
 describe('parseTransitResponse', () => {
-  it('should parse transit response correctly', () => {
+  it('should parse multi-origin transit response correctly', () => {
     const response = {
-      transfers: [
-        ['18:49発 → 19:38着(49分)(1回)', '■六本木一丁目\n｜東京メトロ南北線'],
-        ['18:55発 → 19:45着(50分)(2回)', '■六本木一丁目\n｜東京メトロ丸ノ内線'],
-      ] as [string, string][]
+      routes: [
+        {
+          origin: '六本木一丁目',
+          destination: 'つつじヶ丘（東京）',
+          transfers: [
+            ['18:49発 → 19:38着(49分)(1回)', '■六本木一丁目\n｜東京メトロ南北線'],
+            ['18:55発 → 19:45着(50分)(2回)', '■六本木一丁目\n｜東京メトロ丸ノ内線'],
+          ] as [string, string][],
+        },
+      ],
+    }
+
+    const result = parseTransitResponse(response)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].origin).toBe('六本木一丁目')
+    expect(result[0].destination).toBe('つつじヶ丘（東京）')
+    expect(result[0].transfers).toHaveLength(2)
+    expect(result[0].transfers[0].summary).toBe('18:49発 → 19:38着(49分)(1回)')
+    expect(result[0].transfers[0].route).toBe('■六本木一丁目\n｜東京メトロ南北線')
+  })
+
+  it('should handle empty routes array', () => {
+    const response = { routes: [] }
+    const result = parseTransitResponse(response)
+    expect(result).toHaveLength(0)
+  })
+
+  it('should parse multiple origin routes', () => {
+    const response = {
+      routes: [
+        {
+          origin: '六本木一丁目',
+          destination: 'つつじヶ丘（東京）',
+          transfers: [['summary1', 'route1']] as [string, string][],
+        },
+        {
+          origin: '神谷町',
+          destination: 'つつじヶ丘（東京）',
+          transfers: [['summary2', 'route2']] as [string, string][],
+        },
+      ],
     }
 
     const result = parseTransitResponse(response)
 
     expect(result).toHaveLength(2)
-    expect(result[0].summary).toBe('18:49発 → 19:38着(49分)(1回)')
-    expect(result[0].route).toBe('■六本木一丁目\n｜東京メトロ南北線')
-  })
-
-  it('should handle empty transfers array', () => {
-    const response = { transfers: [] }
-    const result = parseTransitResponse(response)
-    expect(result).toHaveLength(0)
+    expect(result[0].origin).toBe('六本木一丁目')
+    expect(result[1].origin).toBe('神谷町')
   })
 })
 

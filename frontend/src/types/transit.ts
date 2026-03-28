@@ -3,8 +3,14 @@ export interface TransitRoute {
   route: string
 }
 
+export interface OriginRoute {
+  origin: string
+  destination: string
+  transfers: TransitRoute[]
+}
+
 export interface TransitResponse {
-  transfers: [string, string][]
+  routes: { origin: string; destination: string; transfers: [string, string][] }[]
 }
 
 export interface StatusResponse {
@@ -12,17 +18,18 @@ export interface StatusResponse {
   timestamp: string
 }
 
-export interface TransitState {
-  routes: TransitRoute[]
+export interface MultiTransitState {
+  originRoutes: OriginRoute[]
   loading: boolean
   error: string | null
   lastUpdated: Date | null
 }
 
-export function parseTransitResponse(data: TransitResponse): TransitRoute[] {
-  return data.transfers.map(([summary, route]) => ({
-    summary,
-    route,
+export function parseTransitResponse(data: TransitResponse): OriginRoute[] {
+  return data.routes.map(({ origin, destination, transfers }) => ({
+    origin,
+    destination,
+    transfers: transfers.map(([summary, route]) => ({ summary, route })),
   }))
 }
 

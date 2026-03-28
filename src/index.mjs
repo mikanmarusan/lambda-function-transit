@@ -3,8 +3,15 @@
  * Migrated from Python to Node.js 22
  */
 
-const JORUDAN_URL = 'https://www.jorudan.co.jp/norikae/cgi/nori.cgi?rf=top&eok1=R-&eok2=R-&pg=0&eki1=%E5%85%AD%E6%9C%AC%E6%9C%A8%E4%B8%80%E4%B8%81%E7%9B%AE&Cmap1=&eki2=%E3%81%A4%E3%81%A4%E3%81%98%E3%83%B6%E4%B8%98%EF%BC%88%E6%9D%B1%E4%BA%AC%EF%BC%89&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t';
 const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
+const JORUDAN_URL_PREFIX = `${JORUDAN_BASE_URL}/norikae/cgi/nori.cgi?rf=top&eok1=R-&eok2=R-&pg=0&eki1=`;
+const JORUDAN_URL_SUFFIX = '&Cmap1=&eki2=%E3%81%A4%E3%81%A4%E3%81%98%E3%83%B6%E4%B8%98%EF%BC%88%E6%9D%B1%E4%BA%AC%EF%BC%89&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t';
+const JORUDAN_DESTINATION = 'つつじヶ丘（東京）';
+const JORUDAN_ORIGINS = [
+  { origin: '六本木一丁目', url: `${JORUDAN_URL_PREFIX}%E5%85%AD%E6%9C%AC%E6%9C%A8%E4%B8%80%E4%B8%81%E7%9B%AE${JORUDAN_URL_SUFFIX}` },
+  { origin: '神谷町',       url: `${JORUDAN_URL_PREFIX}%E7%A5%9E%E8%B0%B7%E7%94%BA${JORUDAN_URL_SUFFIX}` },
+  { origin: '麻布十番',     url: `${JORUDAN_URL_PREFIX}%E9%BA%BB%E5%B8%83%E5%8D%81%E7%95%AA${JORUDAN_URL_SUFFIX}` },
+];
 const REQUEST_TIMEOUT_MS = 3000;
 const MIN_EXPECTED_BLOCKS = 3;
 const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
@@ -261,30 +268,50 @@ export async function handler(event, _context) {
   }
 
   try {
-    const body = await fetchTransitPage(JORUDAN_URL);
-    const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
+    const results = await Promise.allSettled(
+      JORUDAN_ORIGINS.map(({ origin, url }) =>
+        fetchTransitPage(url).then(body => {
+          const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
+          if (blocks.length < MIN_EXPECTED_BLOCKS) {
+            throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);
+          }
+          const targetBlock = blocks[TARGET_BLOCK_INDEX];
+          const routeBlocks = splitRoutes(targetBlock);
+          if (routeBlocks.length === 0) {
+            throw new Error('No transit routes found in response');
+          }
+          const transfers = routeBlocks
+            .slice(0, MAX_CANDIDATES)
+            .map(route => [getSummary(route), getRoute(route)])
+            .filter(([summary, route]) => summary !== '()()' && route.trim());
+          if (transfers.length === 0) {
+            throw new Error('No valid transit routes found in response');
+          }
+          return { origin, destination: JORUDAN_DESTINATION, transfers };
+        })
+      )
+    );
 
-    if (blocks.length < MIN_EXPECTED_BLOCKS) {
-      throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);
-    }
+    const routes = results
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value);
 
-    const targetBlock = blocks[TARGET_BLOCK_INDEX];
-    const routes = splitRoutes(targetBlock);
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(JSON.stringify({
+          level: 'warn',
+          message: 'Partial origin fetch failure',
+          origin: JORUDAN_ORIGINS[i].origin,
+          errorMessage: r.reason?.message,
+        }));
+      }
+    });
 
     if (routes.length === 0) {
-      throw new Error('No transit routes found in response');
+      throw new Error('All origin fetches failed');
     }
 
-    const transfers = routes
-      .slice(0, MAX_CANDIDATES)
-      .map(route => [getSummary(route), getRoute(route)])
-      .filter(([summary, route]) => summary !== '()()' && route.trim());
-
-    if (transfers.length === 0) {
-      throw new Error('No valid transit routes found in response');
-    }
-
-    return createJsonResponse(200, { transfers });
+    return createJsonResponse(200, { routes });
   } catch (error) {
     console.error(JSON.stringify({
       level: 'error',
