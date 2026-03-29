@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ArrowRight, ArrowClockwise, Train, Spinner } from '@phosphor-icons/react'
 import { useTransit, useApiStatus } from './hooks/useTransit'
 import { TransitCard } from './components/TransitCard'
@@ -5,8 +6,13 @@ import { StatusIndicator } from './components/StatusIndicator'
 import styles from './App.module.css'
 
 function App() {
-  const { routes, loading, error, lastUpdated, refresh } = useTransit()
+  const { originRoutes, loading, error, lastUpdated, refresh } = useTransit()
   const apiStatus = useApiStatus()
+
+  const origins = originRoutes.map(r => r.origin)
+  const [selectedOrigin, setSelectedOrigin] = useState<string | null>(null)
+  const activeOrigin = selectedOrigin ?? origins[0] ?? null
+  const activeRoutes = originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []
 
   return (
     <div className={styles.app}>
@@ -23,10 +29,16 @@ function App() {
       <main className={styles.main}>
         <div className={styles.container}>
           <div className={styles.routeHeader}>
-            <div className={styles.route}>
-              <span className={styles.station}>六本木一丁目</span>
-              <ArrowRight size={16} className={styles.routeArrow} />
-              <span className={styles.station}>つつじヶ丘</span>
+            <div className={styles.tabs}>
+              {origins.map(origin => (
+                <button
+                  key={origin}
+                  className={`${styles.tab} ${origin === activeOrigin ? styles.tabActive : ''}`}
+                  onClick={() => setSelectedOrigin(origin)}
+                >
+                  {origin}
+                </button>
+              ))}
             </div>
             <button
               className={styles.refreshButton}
@@ -42,6 +54,14 @@ function App() {
             </button>
           </div>
 
+          {activeOrigin && (
+            <div className={styles.route}>
+              <span className={styles.station}>{activeOrigin}</span>
+              <ArrowRight size={16} className={styles.routeArrow} />
+              <span className={styles.station}>つつじヶ丘</span>
+            </div>
+          )}
+
           <div className={styles.content}>
             {error && (
               <div className={styles.error}>
@@ -49,16 +69,16 @@ function App() {
               </div>
             )}
 
-            {!error && routes.length === 0 && loading && (
+            {!error && activeRoutes.length === 0 && loading && (
               <div className={styles.loading}>
                 <Spinner size={24} className={styles.spinner} />
                 <span>Loading transit information...</span>
               </div>
             )}
 
-            {!error && routes.length > 0 && (
+            {!error && activeRoutes.length > 0 && (
               <div className={styles.cards}>
-                {routes.map((route, index) => (
+                {activeRoutes.map((route, index) => (
                   <TransitCard key={index} route={route} index={index} />
                 ))}
               </div>

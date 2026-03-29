@@ -173,7 +173,11 @@ describe('handler', () => {
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       assert.ok(result.body, 'Should have body');
       const body = JSON.parse(result.body);
-      assert.ok(body.transfers, 'Should have transfers array');
+      assert.ok(body.routes, 'Should have routes array');
+      assert.ok(body.routes.length > 0, 'Should have at least one origin route');
+      assert.ok(body.routes[0].transfers, 'First origin should have transfers');
+      assert.ok(body.routes[0].origin, 'First origin should have origin label');
+      assert.ok(body.routes[0].destination, 'First origin should have destination label');
     });
   });
 
@@ -252,23 +256,24 @@ describe('handler', () => {
     });
   });
 
-  it('should return multiple candidates when available', async () => {
+  it('should return multiple candidates per origin when available', async () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockMultipleBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       const body = JSON.parse(result.body);
-      assert.strictEqual(body.transfers.length, 2, 'Should have 2 transfers');
-      assert.ok(body.transfers[0][0].includes('06:30'), 'Should contain first route time');
-      assert.ok(body.transfers[1][0].includes('07:00'), 'Should contain second route time');
+      const firstOrigin = body.routes[0];
+      assert.strictEqual(firstOrigin.transfers.length, 2, 'Should have 2 transfers per origin');
+      assert.ok(firstOrigin.transfers[0][0].includes('06:30'), 'Should contain first route time');
+      assert.ok(firstOrigin.transfers[1][0].includes('07:00'), 'Should contain second route time');
     });
   });
 
-  it('should limit candidates to MAX_CANDIDATES (2)', async () => {
+  it('should limit candidates to MAX_CANDIDATES (2) per origin', async () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockThreeBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       const body = JSON.parse(result.body);
-      assert.strictEqual(body.transfers.length, 2, 'Should have only 2 transfers');
+      assert.strictEqual(body.routes[0].transfers.length, 2, 'Should have only 2 transfers per origin');
     });
   });
 
@@ -292,14 +297,30 @@ describe('handler', () => {
     });
   });
 
-  it('should return transfers array with summary and route', async () => {
+  it('should return routes array with origin, destination, and transfers', async () => {
     await runWithMockedFetch(createMockResponse(validHtml), async () => {
       const result = await handler({}, {});
       const body = JSON.parse(result.body);
-      assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
-      assert.ok(body.transfers.length > 0, 'transfers should have at least one element');
-      assert.ok(Array.isArray(body.transfers[0]), 'Each transfer should be an array');
-      assert.strictEqual(body.transfers[0].length, 2, 'Each transfer should have 2 elements [summary, route]');
+      assert.ok(Array.isArray(body.routes), 'routes should be an array');
+      assert.ok(body.routes.length > 0, 'routes should have at least one origin');
+      const firstOrigin = body.routes[0];
+      assert.ok(typeof firstOrigin.origin === 'string', 'origin should be a string');
+      assert.ok(typeof firstOrigin.destination === 'string', 'destination should be a string');
+      assert.ok(Array.isArray(firstOrigin.transfers), 'transfers should be an array');
+      assert.ok(firstOrigin.transfers.length > 0, 'transfers should have at least one element');
+      assert.ok(Array.isArray(firstOrigin.transfers[0]), 'Each transfer should be an array');
+      assert.strictEqual(firstOrigin.transfers[0].length, 2, 'Each transfer should have 2 elements [summary, route]');
+    });
+  });
+
+  it('should return 3 origin routes', async () => {
+    await runWithMockedFetch(createMockResponse(validHtml), async () => {
+      const result = await handler({}, {});
+      const body = JSON.parse(result.body);
+      assert.strictEqual(body.routes.length, 3, 'Should have 3 origin routes');
+      assert.strictEqual(body.routes[0].origin, '六本木一丁目');
+      assert.strictEqual(body.routes[1].origin, '神谷町');
+      assert.strictEqual(body.routes[2].origin, '麻布十番');
     });
   });
 });

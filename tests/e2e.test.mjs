@@ -17,19 +17,27 @@ describe('E2E Tests', () => {
 
       if (result.statusCode === 200) {
         // Verify JSON structure for success case
-        assert.ok(body.transfers, 'Should have transfers array');
-        assert.ok(Array.isArray(body.transfers), 'transfers should be an array');
-        assert.ok(body.transfers.length > 0, 'Should have at least one transfer');
-        assert.ok(body.transfers.length <= 2, 'Should have at most 2 transfers');
+        assert.ok(body.routes, 'Should have routes array');
+        assert.ok(Array.isArray(body.routes), 'routes should be an array');
+        assert.ok(body.routes.length > 0, 'Should have at least one origin route');
+
+        // Each origin route should have origin, destination, transfers
+        const firstOrigin = body.routes[0];
+        assert.ok(firstOrigin.origin, 'Should have origin label');
+        assert.ok(firstOrigin.destination, 'Should have destination label');
+        assert.ok(Array.isArray(firstOrigin.transfers), 'transfers should be an array');
+        assert.ok(firstOrigin.transfers.length > 0, 'Should have at least one transfer');
+        assert.ok(firstOrigin.transfers.length <= 2, 'Should have at most 2 transfers per origin');
 
         // Each transfer should be [summary, route]
-        const [summary, route] = body.transfers[0];
+        const [summary, route] = firstOrigin.transfers[0];
         assert.ok(typeof summary === 'string', 'Summary should be a string');
         assert.ok(typeof route === 'string', 'Route should be a string');
         assert.ok(summary.includes('('), 'Summary should contain parentheses');
 
         console.log('Success! Transit data fetched as JSON');
-        console.log('Number of transfers:', body.transfers.length);
+        console.log('Number of origin routes:', body.routes.length);
+        console.log('First origin:', firstOrigin.origin);
         console.log('First transfer summary:', summary);
       } else {
         // If failed, check error response structure
@@ -62,7 +70,7 @@ describe('E2E Tests', () => {
 
         // Verify JSON response
         const body = JSON.parse(result.body);
-        assert.ok(body.transfers || body.error, 'Should have transfers or error');
+        assert.ok(body.routes || body.error, 'Should have routes or error');
 
         console.log('Docker Lambda Response statusCode:', result.statusCode);
         console.log('Docker Lambda Response:', body);

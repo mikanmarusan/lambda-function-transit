@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { TransitState, TransitResponse, parseTransitResponse } from '../types/transit'
+import { MultiTransitState, TransitResponse, parseTransitResponse } from '../types/transit'
 
 const API_BASE = '/api'
 
@@ -7,14 +7,14 @@ function isValidTransitResponse(data: unknown): data is TransitResponse {
   return (
     typeof data === 'object' &&
     data !== null &&
-    'transfers' in data &&
-    Array.isArray((data as TransitResponse).transfers)
+    'routes' in data &&
+    Array.isArray((data as TransitResponse).routes)
   )
 }
 
 export function useTransit() {
-  const [state, setState] = useState<TransitState>({
-    routes: [],
+  const [state, setState] = useState<MultiTransitState>({
+    originRoutes: [],
     loading: false,
     error: null,
     lastUpdated: null,
@@ -44,10 +44,10 @@ export function useTransit() {
         throw new Error('Invalid API response format')
       }
 
-      const routes = parseTransitResponse(data)
+      const originRoutes = parseTransitResponse(data)
 
       setState({
-        routes,
+        originRoutes,
         loading: false,
         error: null,
         lastUpdated: new Date(),
