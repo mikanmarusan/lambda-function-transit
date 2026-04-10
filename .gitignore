@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 # Plan files (Claude Code temporary working documents)
 .plans/*
 !.plans/.gitkeep
+frontend/.plans/
+
+# macOS metadata
+.DS_Store
