@@ -76,9 +76,61 @@ jobs:
       - name: SAM Build
         run: sam build
 
+      - name: SAM Deploy (dry-run plan)
+        if: ${{ github.event.inputs.dry-run == 'true' }}
+        run: |
+          if [ -z "${{ secrets.WEB_ACL_ARN_PROD }}" ]; then
+            echo "::error::WEB_ACL_ARN_PROD secret is not set on the production environment."
+            exit 1
+          fi
+          set -o pipefail
+          sam deploy \
+            --no-execute-changeset \
+            --no-fail-on-empty-changeset \
+            --resolve-s3 \
+            --parameter-overrides "WebACLArn=${{ secrets.WEB_ACL_ARN_PROD }}" \
+            2>&1 | tee /tmp/sam-deploy-output.log
+
+      - name: Describe pending changeset
+        if: ${{ github.event.inputs.dry-run == 'true' }}
+        run: |
+          # Extract the changeset ARN that sam deploy --no-execute-changeset just printed.
+          CHANGESET_ARN=$(grep -oE 'arn:aws:cloudformation:[^[:space:]]+:changeSet/[^[:space:]]+' /tmp/sam-deploy-output.log | tail -1)
+          if [ -z "$CHANGESET_ARN" ]; then
+            echo "::error::Could not extract changeset ARN from sam deploy output. Either no changeset was created (template == live state, in which case this PR is a no-op and unsafe to land) or sam output format changed."
+            exit 1
+          fi
+          echo "Changeset ARN: $CHANGESET_ARN"
+          aws cloudformation describe-change-set \
+            --change-set-name "$CHANGESET_ARN" \
+            --query 'Changes[].{Action:ResourceChange.Action,Type:ResourceChange.ResourceType,Logical:ResourceChange.LogicalResourceId,Replacement:ResourceChange.Replacement}' \
+            --output table
+
+          # Hard gate: WebACLId change must be present on CloudFrontDistribution
+          WEBACL_DIFF=$(aws cloudformation describe-change-set \
+            --change-set-name "$CHANGESET_ARN" \
+            --query 'Changes[?ResourceChange.LogicalResourceId==`CloudFrontDistribution`].ResourceChange.Details[?Target.Name==`WebACLId`]' \
+            --output json)
+          if [ "$(echo "$WEBACL_DIFF" | jq 'flatten | length')" -eq 0 ]; then
+            echo "::error::Dry-run changeset does NOT include a WebACLId change on CloudFrontDistribution. Either the secret is wrong, the live state already matches the template (so this PR adds no value), or the template-side WebACLId line is missing/inert."
+            echo "$WEBACL_DIFF"
+            exit 1
+          fi
+          echo "WebACLId change verified:"
+          echo "$WEBACL_DIFF" | jq .
+
       - name: SAM Deploy
         if: ${{ github.event.inputs.dry-run != 'true' }}
-        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --resolve-s3
+        run: |
+          if [ -z "${{ secrets.WEB_ACL_ARN_PROD }}" ]; then
+            echo "::error::WEB_ACL_ARN_PROD secret is not set on the production environment."
+            exit 1
+          fi
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --resolve-s3 \
+            --parameter-overrides "WebACLArn=${{ secrets.WEB_ACL_ARN_PROD }}"
 
       - name: Get Stack Outputs
         if: ${{ github.event.inputs.dry-run != 'true' }}
@@ -121,3 +173,12 @@ jobs:
           sleep 30  # Wait for CloudFront invalidation
           curl -f "${{ steps.stack-outputs.outputs.frontend_url }}" || exit 1
           curl -f "${{ steps.stack-outputs.outputs.frontend_url }}/api/status" || exit 1
+          # Verify CloudFront SecurityHeadersPolicy applied to /api/* (PR #35)
+          headers=$(curl -sI "${{ steps.stack-outputs.outputs.frontend_url }}/api/status")
+          for h in 'strict-transport-security' 'x-content-type-options' 'x-frame-options'; do
+            if ! echo "$headers" | grep -qi "^$h:"; then
+              echo "::error::Security header $h missing from /api/status response"
+              echo "$headers"
+              exit 1
+            fi
+          done
