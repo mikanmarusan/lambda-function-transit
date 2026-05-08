@@ -92,13 +92,20 @@ const BROWSER_HEADERS = {
 };
 
 /**
- * Extract redirect URL from JavaScript redirect page
+ * Extract redirect URL from JavaScript redirect page.
+ * Only single-leading-slash relative paths are allowed; absolute URLs and
+ * non-HTTP schemes (data:, javascript:, ftp:, file:, ...) return null so the
+ * caller treats them as "no redirect" instead of feeding them into
+ * safeJoinUrl(), which throws on `://`.
  * @param {string} body - HTML body containing JS redirect
- * @returns {string|null} Redirect URL or null
+ * @returns {string|null} Redirect path (relative) or null
  */
-function extractRedirectUrl(body) {
+export function extractRedirectUrl(body) {
   const match = body.match(/window\.location\.href="([^"]+)"/);
-  return match ? match[1] : null;
+  if (!match) return null;
+  const candidate = match[1].trim();
+  if (!/^\/(?!\/)/.test(candidate)) return null;
+  return candidate;
 }
 
 /**
