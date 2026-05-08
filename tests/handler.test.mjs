@@ -413,3 +413,24 @@ describe('/status endpoint', () => {
     assert.strictEqual(body.status, 'ok', 'Should have status ok');
   });
 });
+
+describe('CORS headers', () => {
+  it('should advertise only Content-Type in Access-Control-Allow-Headers', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(
+      result.headers['Access-Control-Allow-Headers'],
+      'Content-Type',
+      'Allow-Headers should not include Authorization since no auth is implemented'
+    );
+  });
+
+  it('should set wildcard Access-Control-Allow-Origin', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(result.headers['Access-Control-Allow-Origin'], '*');
+  });
+
+  it('should allow only GET and OPTIONS methods', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(result.headers['Access-Control-Allow-Methods'], 'GET,OPTIONS');
+  });
+});
