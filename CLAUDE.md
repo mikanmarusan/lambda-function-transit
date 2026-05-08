@@ -52,13 +52,27 @@ npm run lint               # Backend lint
 cd frontend && npm run lint # Frontend lint
 
 # SAM deployment (includes CloudFront + S3)
-sam build && sam deploy
+sam build && sam deploy   # NON-PROD STACKS ONLY — see Production deploys below
 
 # Frontend deployment (after SAM deploy)
 cd frontend && npm run build
 aws s3 sync dist/ s3://<bucket-name>/
 aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 ```
+
+### Production deploys
+
+> **Production deploys MUST go through the `Deploy to Production` GitHub Actions workflow** (`workflow_dispatch`). The CloudFront distribution is protected by a Web ACL that AWS's CloudFront pricing-plan subscription requires to remain attached. The Web ACL ARN is held in the `WEB_ACL_ARN_PROD` secret on the `production` GitHub environment, and the workflow injects it via `--parameter-overrides`. Running plain `sam deploy` locally against the production stack would re-render the distribution without `WebACLId` — CloudFront then refuses with "You can't remove or replace the web ACL for your distribution. Distributions with a pricing plan subscription must have a web ACL resource." and rolls back.
+
+For emergency local deploys (only when GitHub Actions is unavailable):
+
+```bash
+WEB_ACL_ARN_PROD="arn:aws:wafv2:us-east-1:<ACCT>:global/webacl/<NAME>/<UUID>"  # retrieve from a secure store
+sam build
+sam deploy --parameter-overrides "WebACLArn=$WEB_ACL_ARN_PROD"
+```
+
+The Web ACL itself is **not** managed by this stack (it was created by the CloudFront pricing-plan opt-in). Do not edit the Web ACL attachment in the AWS console — the next CFN deploy will reconcile to whatever ARN is in the secret. If the Web ACL is ever recreated and the ARN changes, update the secret first.
 
 ## Key Implementation Notes
 

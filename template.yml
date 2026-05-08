@@ -3,6 +3,20 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Transit app with Lambda API and CloudFront + S3 frontend
 
+Parameters:
+  WebACLArn:
+    Type: String
+    Default: ''
+    Description: |
+      ARN of the WAFv2 Web ACL (Scope: CLOUDFRONT, region us-east-1) attached to the
+      CloudFront distribution. Required in production where a CloudFront pricing-plan
+      subscription mandates a Web ACL. Leave empty in non-prod stacks.
+    AllowedPattern: '^$|^arn:aws:wafv2:us-east-1:\d{12}:global/webacl/[^/]+/[a-f0-9-]+$'
+    ConstraintDescription: Must be empty or a WAFv2 CLOUDFRONT-scope Web ACL ARN in us-east-1.
+
+Conditions:
+  HasWebACL: !Not [!Equals [!Ref WebACLArn, '']]
+
 Globals:
   Api:
     Cors:
@@ -115,6 +129,7 @@ Resources:
         HttpVersion: http2
         PriceClass: PriceClass_200
         Comment: !Sub '${AWS::StackName} Frontend Distribution'
+        WebACLId: !If [HasWebACL, !Ref WebACLArn, !Ref AWS::NoValue]
 
         Origins:
           # S3 Origin for static files
