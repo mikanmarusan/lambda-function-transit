@@ -1,6 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { getSummary, getRoute, splitRoutes, handler } from '../src/index.mjs';
+import { getSummary, getRoute, splitRoutes, handler, extractRedirectUrl } from '../src/index.mjs';
 
 // Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
 const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
@@ -156,6 +156,67 @@ describe('splitRoutes', () => {
   it('should filter out empty strings', () => {
     const routes = splitRoutes('   \n  ' + mockBlock);
     assert.strictEqual(routes.length, 1, 'Should filter whitespace-only entries');
+  });
+});
+
+describe('extractRedirectUrl scheme validation', () => {
+  function bodyWith(href) {
+    return `<html><script>window.location.href="${href}"</script></html>`;
+  }
+
+  it('should accept a single-leading-slash relative path', () => {
+    const result = extractRedirectUrl(bodyWith('/webuser/set-uuid.cgi?url=https%3A%2F%2Fwww.jorudan.co.jp%2Fnorikae%2Fcgi%2Fnori.cgi'));
+    assert.strictEqual(result, '/webuser/set-uuid.cgi?url=https%3A%2F%2Fwww.jorudan.co.jp%2Fnorikae%2Fcgi%2Fnori.cgi');
+  });
+
+  it('should accept a relative path with query string', () => {
+    const result = extractRedirectUrl(bodyWith('/path/with/?query=v&other=v'));
+    assert.strictEqual(result, '/path/with/?query=v&other=v');
+  });
+
+  it('should reject absolute https:// URLs (downstream safeJoinUrl would throw)', () => {
+    const result = extractRedirectUrl(bodyWith('https://www.jorudan.co.jp/norikae/'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject data: URIs', () => {
+    const result = extractRedirectUrl(bodyWith('data:text/html,<script>alert(1)</script>'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject javascript: URIs', () => {
+    const result = extractRedirectUrl(bodyWith('javascript:alert(1)'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject mixed-case JavaScript: URIs', () => {
+    const result = extractRedirectUrl(bodyWith('JavaScript:alert(1)'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject ftp:// URIs', () => {
+    const result = extractRedirectUrl(bodyWith('ftp://attacker.example/'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject file:// URIs', () => {
+    const result = extractRedirectUrl(bodyWith('file:///etc/passwd'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject javascript: URIs even with leading whitespace (after trim)', () => {
+    const result = extractRedirectUrl(bodyWith('  javascript:alert(1)'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should reject protocol-relative // URIs', () => {
+    const result = extractRedirectUrl(bodyWith('//attacker.example/path'));
+    assert.strictEqual(result, null);
+  });
+
+  it('should return null when window.location.href is missing', () => {
+    const result = extractRedirectUrl('<html>no redirect here</html>');
+    assert.strictEqual(result, null);
   });
 });
 
