@@ -3,13 +3,23 @@ import { MultiTransitState, TransitResponse, parseTransitResponse } from '../typ
 
 const API_BASE = '/api'
 
-function isValidTransitResponse(data: unknown): data is TransitResponse {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'routes' in data &&
-    Array.isArray((data as TransitResponse).routes)
-  )
+export function isValidTransitResponse(data: unknown): data is TransitResponse {
+  if (typeof data !== 'object' || data === null || !('routes' in data)) return false
+  const routes = (data as TransitResponse).routes
+  if (!Array.isArray(routes)) return false
+  return routes.every((r) => {
+    if (r === null || typeof r !== 'object') return false
+    const route = r as { origin: unknown; destination: unknown; transfers: unknown }
+    if (typeof route.origin !== 'string' || typeof route.destination !== 'string') return false
+    if (!Array.isArray(route.transfers)) return false
+    return route.transfers.every(
+      (t) =>
+        Array.isArray(t) &&
+        t.length === 2 &&
+        typeof t[0] === 'string' &&
+        typeof t[1] === 'string'
+    )
+  })
 }
 
 export function useTransit() {

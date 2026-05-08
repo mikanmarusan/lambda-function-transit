@@ -231,6 +231,7 @@ async function fetchTransitPage(url) {
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
+  'X-Content-Type-Options': 'nosniff',
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'GET,OPTIONS',

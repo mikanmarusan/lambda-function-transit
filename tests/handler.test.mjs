@@ -433,4 +433,9 @@ describe('CORS headers', () => {
     const result = await handler({ path: '/status' }, {});
     assert.strictEqual(result.headers['Access-Control-Allow-Methods'], 'GET,OPTIONS');
   });
+
+  it('should set X-Content-Type-Options to nosniff', async () => {
+    const result = await handler({ path: '/status' }, {});
+    assert.strictEqual(result.headers['X-Content-Type-Options'], 'nosniff');
+  });
 });
