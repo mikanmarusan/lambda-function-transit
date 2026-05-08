@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseTransitResponse, parseSummary, parseRoute } from '../src/types/transit'
+import { isValidTransitResponse } from '../src/hooks/useTransit'
 
 describe('parseTransitResponse', () => {
   it('should parse multi-origin transit response correctly', () => {
@@ -180,5 +181,131 @@ describe('parseRoute', () => {
     expect(result[0].isTerminal).toBe(false)
     expect(result[1].station).toBe('駅B')
     expect(result[1].isTerminal).toBe(false)
+  })
+})
+
+describe('isValidTransitResponse', () => {
+  it('rejects null', () => {
+    expect(isValidTransitResponse(null)).toBe(false)
+  })
+
+  it('rejects undefined', () => {
+    expect(isValidTransitResponse(undefined)).toBe(false)
+  })
+
+  it('rejects empty object', () => {
+    expect(isValidTransitResponse({})).toBe(false)
+  })
+
+  it('rejects routes that are not an array', () => {
+    expect(isValidTransitResponse({ routes: 'not array' })).toBe(false)
+  })
+
+  it('accepts empty routes array', () => {
+    expect(isValidTransitResponse({ routes: [] })).toBe(true)
+  })
+
+  it('accepts a route with empty transfers', () => {
+    expect(
+      isValidTransitResponse({ routes: [{ origin: 'A', destination: 'B', transfers: [] }] })
+    ).toBe(true)
+  })
+
+  it('accepts a route with valid string-tuple transfers', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: [['s', 'r']] }],
+      })
+    ).toBe(true)
+  })
+
+  it('accepts the real Jorudan-shaped fixture', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [
+          {
+            origin: '六本木一丁目',
+            destination: 'つつじヶ丘（東京）',
+            transfers: [
+              ['18:49発 → 19:38着(49分)(1回)', '■六本木一丁目\n｜東京メトロ南北線'],
+              ['18:55発 → 19:45着(50分)(2回)', '■六本木一丁目\n｜東京メトロ丸ノ内線'],
+            ],
+          },
+        ],
+      })
+    ).toBe(true)
+  })
+
+  it('rejects a route missing origin', () => {
+    expect(
+      isValidTransitResponse({ routes: [{ destination: 'B', transfers: [] }] })
+    ).toBe(false)
+  })
+
+  it('rejects a route missing destination', () => {
+    expect(
+      isValidTransitResponse({ routes: [{ origin: 'A', transfers: [] }] })
+    ).toBe(false)
+  })
+
+  it('rejects a route missing transfers', () => {
+    expect(
+      isValidTransitResponse({ routes: [{ origin: 'A', destination: 'B' }] })
+    ).toBe(false)
+  })
+
+  it('rejects non-string origin', () => {
+    expect(
+      isValidTransitResponse({ routes: [{ origin: 42, destination: 'B', transfers: [] }] })
+    ).toBe(false)
+  })
+
+  it('rejects non-array transfers', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: 'not-array' }],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects malformed nested: transfers contains a number', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: [123] }],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects malformed nested: transfers contains an object', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: [{}] }],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects malformed nested: transfers tuple has only one element', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: [['only-one-string']] }],
+      })
+    ).toBe(false)
+  })
+
+  it('rejects malformed nested: transfers tuple second element is not a string', () => {
+    expect(
+      isValidTransitResponse({
+        routes: [{ origin: 'A', destination: 'B', transfers: [['s', 42]] }],
+      })
+    ).toBe(false)
+  })
+})
+
+describe('parseSummary ReDoS regression', () => {
+  it('completes quickly on a long whitespace-padded input', () => {
+    const start = performance.now()
+    parseSummary(' '.repeat(100000) + 'foo')
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
   })
 })
