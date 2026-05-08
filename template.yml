@@ -127,7 +127,12 @@ Resources:
         Enabled: true
         DefaultRootObject: index.html
         HttpVersion: http2
-        PriceClass: PriceClass_200
+        # PriceClass is locked by the CloudFront flat-rate pricing plan that mandates the
+        # Web ACL (see WebACLId below). When the plan is active, any explicit PriceClass
+        # override is rejected with "Distributions with the Free pricing plan can't have
+        # the following features: Price class". We therefore omit PriceClass on stacks
+        # that have the WebACL (= flat-rate plan), and keep PriceClass_200 elsewhere.
+        PriceClass: !If [HasWebACL, !Ref AWS::NoValue, PriceClass_200]
         Comment: !Sub '${AWS::StackName} Frontend Distribution'
         WebACLId: !If [HasWebACL, !Ref WebACLArn, !Ref AWS::NoValue]
 
