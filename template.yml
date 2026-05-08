@@ -9,6 +9,11 @@ Globals:
       AllowOrigin: "'*'"
       AllowHeaders: "'Content-Type'"
       AllowMethods: "'GET,OPTIONS'"
+    MethodSettings:
+      - ResourcePath: '/*'
+        HttpMethod: '*'
+        ThrottlingBurstLimit: 100
+        ThrottlingRateLimit: 50
 
 Resources:
   # Lambda Function
