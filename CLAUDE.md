@@ -61,8 +61,6 @@ The `frontend/` directory is a self-contained Vite + React workspace with its ow
 |----------|-------------|
 | `ci.yml` | Test backend/frontend, lint, security check, Docker build |
 | `deploy-production.yml` | Manual production deploy with frontend S3 sync |
-| `claude.yml` | AI assistant integration |
-| `claude-code-review.yml` | AI code review |
 
 ## HOW — Development Workflow
 
