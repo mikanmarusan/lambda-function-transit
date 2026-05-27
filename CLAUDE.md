@@ -115,6 +115,8 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 
 > **Production deploys MUST go through the `Deploy to Production` GitHub Actions workflow** (`workflow_dispatch`). The CloudFront distribution is protected by a Web ACL that AWS's CloudFront pricing-plan subscription requires to remain attached. The Web ACL ARN is held in the `WEB_ACL_ARN_PROD` secret on the `production` GitHub environment, and the workflow injects it via `--parameter-overrides`. Running plain `sam deploy` locally against the production stack would re-render the distribution without `WebACLId` — CloudFront then refuses with "You can't remove or replace the web ACL for your distribution. Distributions with a pricing plan subscription must have a web ACL resource." and rolls back.
 
+The workflow authenticates to AWS via GitHub OIDC. The IAM Role ARN (`gh-actions-deploy-prod`) is held in the `AWS_DEPLOY_ROLE_ARN_PROD` secret on the `production` environment; its trust policy pins assumption to `repo:mikanmarusan/lambda-function-transit:environment:production`, so no other repo or environment can use it and no long-lived AK/SK exist for prod deploy.
+
 Emergency local deploys (only when GitHub Actions is unavailable):
 
 ```bash
