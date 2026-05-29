@@ -59,6 +59,11 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Mask WEB_ACL_ARN_PROD across job logs
+        env:
+          WEB_ACL_ARN_PROD: ${{ secrets.WEB_ACL_ARN_PROD }}
+        run: echo "::add-mask::$WEB_ACL_ARN_PROD"
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -77,6 +82,52 @@ jobs:
 
       - name: SAM Build
         run: sam build
+
+      - name: Detect CloudFormation drift
+        run: |
+          set -o pipefail
+          STACK=transitmikanmarusan
+          DETECTION_ID=$(aws cloudformation detect-stack-drift \
+            --stack-name "$STACK" \
+            --query 'StackDriftDetectionId' --output text)
+          echo "DriftDetectionId: $DETECTION_ID"
+
+          SLEEP=5
+          STATUS_JSON=""
+          DETECTION_STATUS=""
+          for i in $(seq 1 20); do
+            STATUS_JSON=$(aws cloudformation describe-stack-drift-detection-status \
+              --stack-drift-detection-id "$DETECTION_ID" --output json)
+            DETECTION_STATUS=$(echo "$STATUS_JSON" | jq -r '.DetectionStatus')
+            echo "Attempt $i: DetectionStatus=$DETECTION_STATUS"
+            if [ "$DETECTION_STATUS" != "DETECTION_IN_PROGRESS" ]; then
+              break
+            fi
+            sleep "$SLEEP"
+            if [ "$SLEEP" -lt 30 ]; then SLEEP=$((SLEEP + 5)); fi
+          done
+
+          if [ "$DETECTION_STATUS" = "DETECTION_FAILED" ]; then
+            echo "::error::Drift detection failed: $(echo "$STATUS_JSON" | jq -r '.DetectionStatusReason')"
+            exit 1
+          fi
+          if [ "$DETECTION_STATUS" != "DETECTION_COMPLETE" ]; then
+            echo "::error::Drift detection did not complete in time (last status=$DETECTION_STATUS). Re-run the workflow."
+            exit 1
+          fi
+
+          DRIFT_STATUS=$(echo "$STATUS_JSON" | jq -r '.StackDriftStatus')
+          if [ "$DRIFT_STATUS" != "IN_SYNC" ]; then
+            echo "::error::Stack $STACK is $DRIFT_STATUS. Drifted resources:"
+            aws cloudformation describe-stack-resource-drifts \
+              --stack-name "$STACK" \
+              --stack-resource-drift-status-filters MODIFIED DELETED \
+              --query 'StackResourceDrifts[].{Logical:LogicalResourceId,Type:ResourceType,Status:StackResourceDriftStatus}' \
+              --output table
+            echo "Remediate by either (a) updating template.yml to absorb the change, or (b) reverting the console change, then re-run this workflow."
+            exit 1
+          fi
+          echo "Stack is IN_SYNC."
 
       - name: Verify WEB_ACL_ARN_PROD secret matches live distribution
         run: |
