@@ -1,5 +1,5 @@
 ---
-name: x-fix-vulnerability
+name: x-fixing-vulnerabilities
 description: Detect and fix npm audit vulnerabilities in root and frontend directories, matching CI audit level (--audit-level=high).
 ---
 
