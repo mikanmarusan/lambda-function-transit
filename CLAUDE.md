@@ -18,7 +18,7 @@ CloudFront + S3 (Frontend) → API Gateway → Lambda → Jorudan
 - **API Gateway routes**: `GET /api/transit`, `GET /api/status`
 - **Region**: `ap-northeast-1`
 
-For the AWS topology diagram, the Jorudan 3-step cookie flow, HTML parsing rules, ReDoS/SSRF guards, API path normalization, and the full response schema, see [`docs/architecture.md`](./docs/architecture.md). The diagram source lives at [`docs/diagrams/lambda-function-transit-aws-architecture.drawio`](./docs/diagrams/lambda-function-transit-aws-architecture.drawio).
+For the AWS topology diagram, the Jorudan 6-hop `jrd_uuid` cookie handshake, HTML parsing rules, ReDoS/SSRF guards, API path normalization, and the full response schema, see [`docs/architecture.md`](./docs/architecture.md). The diagram source lives at [`docs/diagrams/lambda-function-transit-aws-architecture.drawio`](./docs/diagrams/lambda-function-transit-aws-architecture.drawio).
 
 ### Repository Layout
 

@@ -1,6 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { getSummary, getRoute, splitRoutes, handler, extractRedirectUrl } from '../src/index.mjs';
+import { getSummary, getRoute, splitRoutes, handler, extractJsRedirect, isAllowedUrl } from '../src/index.mjs';
 
 // Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
 const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
@@ -159,64 +159,90 @@ describe('splitRoutes', () => {
   });
 });
 
-describe('extractRedirectUrl scheme validation', () => {
-  function bodyWith(href) {
-    return `<html><script>window.location.href="${href}"</script></html>`;
-  }
+describe('extractJsRedirect', () => {
+  const JID = 'https://jid.jorudan.co.jp/jrd_uuid/?returl=abc';
 
-  it('should accept a single-leading-slash relative path', () => {
-    const result = extractRedirectUrl(bodyWith('/webuser/set-uuid.cgi?url=https%3A%2F%2Fwww.jorudan.co.jp%2Fnorikae%2Fcgi%2Fnori.cgi'));
-    assert.strictEqual(result, '/webuser/set-uuid.cgi?url=https%3A%2F%2Fwww.jorudan.co.jp%2Fnorikae%2Fcgi%2Fnori.cgi');
+  it('should extract a single-quoted absolute redirect (the new Jorudan form)', () => {
+    const body = `<script>function rdr(){window.location.href='${JID}';}rdr();</script>`;
+    assert.strictEqual(extractJsRedirect(body), JID);
   });
 
-  it('should accept a relative path with query string', () => {
-    const result = extractRedirectUrl(bodyWith('/path/with/?query=v&other=v'));
-    assert.strictEqual(result, '/path/with/?query=v&other=v');
+  it('should extract a double-quoted redirect (defensive, in case Jorudan reverts)', () => {
+    const body = `<script>window.location.href="${JID}"</script>`;
+    assert.strictEqual(extractJsRedirect(body), JID);
   });
 
-  it('should reject absolute https:// URLs (downstream safeJoinUrl would throw)', () => {
-    const result = extractRedirectUrl(bodyWith('https://www.jorudan.co.jp/norikae/'));
-    assert.strictEqual(result, null);
+  it('should extract a relative redirect string verbatim (validation deferred)', () => {
+    const body = `<script>window.location.href='/webuser/set-uuid.cgi?url=/x'</script>`;
+    assert.strictEqual(extractJsRedirect(body), '/webuser/set-uuid.cgi?url=/x');
   });
 
-  it('should reject data: URIs', () => {
-    const result = extractRedirectUrl(bodyWith('data:text/html,<script>alert(1)</script>'));
-    assert.strictEqual(result, null);
+  it('should return null when no window.location.href is present', () => {
+    assert.strictEqual(extractJsRedirect('<html>no redirect here</html>'), null);
   });
 
-  it('should reject javascript: URIs', () => {
-    const result = extractRedirectUrl(bodyWith('javascript:alert(1)'));
-    assert.strictEqual(result, null);
+  it('should be ReDoS-safe on a pathological unterminated-quote body', () => {
+    const body = `<script>window.location.href='${'a'.repeat(100000)}`;
+    const start = process.hrtime.bigint();
+    const result = extractJsRedirect(body);
+    const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
+    assert.strictEqual(result, null, 'unterminated quote should not match');
+    assert.ok(elapsedMs < 100, `should return quickly (took ${elapsedMs}ms)`);
+  });
+});
+
+describe('isAllowedUrl SSRF guard', () => {
+  const BASE = 'https://www.jorudan.co.jp/norikae/cgi/nori.cgi';
+
+  it('should accept https www.jorudan.co.jp', () => {
+    assert.strictEqual(isAllowedUrl('https://www.jorudan.co.jp/x')?.hostname, 'www.jorudan.co.jp');
   });
 
-  it('should reject mixed-case JavaScript: URIs', () => {
-    const result = extractRedirectUrl(bodyWith('JavaScript:alert(1)'));
-    assert.strictEqual(result, null);
+  it('should accept https jid.jorudan.co.jp', () => {
+    assert.strictEqual(isAllowedUrl('https://jid.jorudan.co.jp/jrd_uuid/')?.hostname, 'jid.jorudan.co.jp');
   });
 
-  it('should reject ftp:// URIs', () => {
-    const result = extractRedirectUrl(bodyWith('ftp://attacker.example/'));
-    assert.strictEqual(result, null);
+  it('should resolve and accept a relative reference against an allowed base', () => {
+    assert.strictEqual(isAllowedUrl('./set_uuid.cgi?returl=abc', 'https://jid.jorudan.co.jp/jrd_uuid/?returl=abc')?.hostname, 'jid.jorudan.co.jp');
   });
 
-  it('should reject file:// URIs', () => {
-    const result = extractRedirectUrl(bodyWith('file:///etc/passwd'));
-    assert.strictEqual(result, null);
+  it('should reject an off-allowlist host', () => {
+    assert.strictEqual(isAllowedUrl('https://evil.com/steal'), null);
   });
 
-  it('should reject javascript: URIs even with leading whitespace (after trim)', () => {
-    const result = extractRedirectUrl(bodyWith('  javascript:alert(1)'));
-    assert.strictEqual(result, null);
+  it('should reject a look-alike suffix host (exact match, not substring)', () => {
+    assert.strictEqual(isAllowedUrl('https://jorudan.co.jp.evil.com/'), null);
+    assert.strictEqual(isAllowedUrl('https://www.jorudan.co.jp.evil.com/'), null);
   });
 
-  it('should reject protocol-relative // URIs', () => {
-    const result = extractRedirectUrl(bodyWith('//attacker.example/path'));
-    assert.strictEqual(result, null);
+  it('should reject the bare apex jorudan.co.jp (not in allowlist)', () => {
+    assert.strictEqual(isAllowedUrl('https://jorudan.co.jp/'), null);
   });
 
-  it('should return null when window.location.href is missing', () => {
-    const result = extractRedirectUrl('<html>no redirect here</html>');
-    assert.strictEqual(result, null);
+  it('should reject http (TLS downgrade), including the metadata IP', () => {
+    assert.strictEqual(isAllowedUrl('http://www.jorudan.co.jp/'), null);
+    assert.strictEqual(isAllowedUrl('http://169.254.169.254/latest/meta-data/'), null);
+  });
+
+  it('should reject credentials embedded in the URL', () => {
+    assert.strictEqual(isAllowedUrl('https://www.jorudan.co.jp@evil.com/'), null);
+    assert.strictEqual(isAllowedUrl('https://user:pass@www.jorudan.co.jp/'), null);
+  });
+
+  it('should reject data:, javascript:, file:, ftp: schemes', () => {
+    assert.strictEqual(isAllowedUrl('data:text/html,<script>alert(1)</script>'), null);
+    assert.strictEqual(isAllowedUrl('javascript:alert(1)'), null);
+    assert.strictEqual(isAllowedUrl('JavaScript:alert(1)'), null);
+    assert.strictEqual(isAllowedUrl('file:///etc/passwd'), null);
+    assert.strictEqual(isAllowedUrl('ftp://attacker.example/'), null);
+  });
+
+  it('should reject protocol-relative // references resolved off-allowlist', () => {
+    assert.strictEqual(isAllowedUrl('//evil.com/path', BASE), null);
+  });
+
+  it('should return null on unparseable input', () => {
+    assert.strictEqual(isAllowedUrl('not a url'), null);
   });
 });
 
@@ -382,6 +408,107 @@ describe('handler', () => {
       assert.strictEqual(body.routes[0].origin, '六本木一丁目');
       assert.strictEqual(body.routes[1].origin, '神谷町');
       assert.strictEqual(body.routes[2].origin, '麻布十番');
+    });
+  });
+});
+
+describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router mock)', () => {
+  const JID = 'https://jid.jorudan.co.jp/jrd_uuid/?returl=https%3A%2F%2Fwww.jorudan.co.jp%2Fwebuser%2Fredirect2.cgi%3Furl%3Dx';
+  const REDIRECT2 = 'https://www.jorudan.co.jp/webuser/redirect2.cgi?url=%2Fnorikae%2Fcgi%2Fnori.cgi%3Ffinal%3D1';
+  const ROPPONGI_EKI1 = '%E5%85%AD%E6%9C%AC%E6%9C%A8'; // unique to the 六本木一丁目 origin
+  const redirectPage = `<!DOCTYPE html><script>function rdr(){window.location.href='${JID}';}rdr();</script>`;
+  const transitHtml = `block0<hr size="1" color="black" />block1<hr size="1" color="black" />${mockBlock}<hr size="1" color="black" />block3`;
+
+  function res({ status = 200, body = '', setCookie = [], location = null }) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: {
+        get: (k) => (k.toLowerCase() === 'location' ? location : null),
+        getSetCookie: () => setCookie,
+      },
+      text: async () => body,
+    };
+  }
+
+  function makeRouter(calls, opts = {}) {
+    const verifyBody = opts.verifyBody ?? REDIRECT2;
+    return mock.fn(async (url, init = {}) => {
+      const cookie = (init.headers && init.headers.Cookie) || '';
+      calls.push({ url, headers: init.headers || {} });
+      if (url.includes('set_uuid.cgi')) {
+        return res({ setCookie: ['jrd_cuid=CUID;path=/jrd_uuid/;max-age=30;Domain=jid.jorudan.co.jp;Secure;HttpOnly'] });
+      }
+      if (url.includes('verify_uuid.cgi')) {
+        if (!cookie.includes('jrd_cuid')) return res({ body: './error.html' });
+        return res({ body: verifyBody, setCookie: ['jrd_uuid=UUID;path=/;max-age=31536000;Domain=.jorudan.co.jp;Secure;HttpOnly'] });
+      }
+      if (url.includes('/jrd_uuid/')) return res({ body: '<html>jid page</html>' }); // hop 2
+      if (url.includes('redirect2.cgi')) return res({ status: 302, location: '/norikae/cgi/nori.cgi?final=1' });
+      // nori.cgi: hop 1 (no jrd_uuid) returns the redirect page; hop 6 (jrd_uuid present) returns transit data
+      if (opts.failOrigin && url.includes(opts.failOrigin) && !cookie.includes('jrd_uuid')) {
+        return res({ body: 'broken: no redirect and no transit data' });
+      }
+      return cookie.includes('jrd_uuid') ? res({ body: transitHtml }) : res({ body: redirectPage });
+    });
+  }
+
+  async function withRouter(opts, testFn) {
+    const calls = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = makeRouter(calls, opts);
+    try {
+      return await testFn(calls);
+    } finally {
+      globalThis.fetch = original;
+    }
+  }
+
+  it('completes the 6-hop flow and returns 200 with 3 origins', async () => {
+    await withRouter({}, async () => {
+      const result = await handler({ path: '/transit' }, {});
+      assert.strictEqual(result.statusCode, 200);
+      const data = JSON.parse(result.body);
+      assert.strictEqual(data.routes.length, 3, 'all 3 origins should succeed');
+      assert.ok(data.routes[0].transfers.length > 0, 'should have parsed transfers');
+    });
+  });
+
+  it('sends AJAX headers (Accept */*, Sec-Fetch-Site, jid Referer) to set_uuid', async () => {
+    await withRouter({}, async (calls) => {
+      await handler({ path: '/transit' }, {});
+      const ajaxCall = calls.find(c => c.url.includes('set_uuid.cgi'));
+      assert.ok(ajaxCall, 'set_uuid.cgi should be called');
+      assert.strictEqual(ajaxCall.headers.Accept, '*/*');
+      assert.strictEqual(ajaxCall.headers['Sec-Fetch-Site'], 'same-origin');
+      assert.ok(ajaxCall.headers.Referer.includes('jid.jorudan.co.jp'), 'Referer should be the jid page');
+    });
+  });
+
+  it('sends domain-scoped jrd_uuid to the final www request but never the jid-only jrd_cuid', async () => {
+    await withRouter({}, async (calls) => {
+      await handler({ path: '/transit' }, {});
+      const finalCall = calls.find(c => c.url.includes('nori.cgi?final=1'));
+      assert.ok(finalCall, 'final nori.cgi should be called');
+      assert.ok(finalCall.headers.Cookie.includes('jrd_uuid'), 'shared parent-domain cookie should reach www');
+      assert.ok(!finalCall.headers.Cookie.includes('jrd_cuid'), 'jid-host-scoped cookie must not leak to www');
+    });
+  });
+
+  it('returns 200 with the surviving origins when one origin fails (partial success)', async () => {
+    await withRouter({ failOrigin: ROPPONGI_EKI1 }, async () => {
+      const result = await handler({ path: '/transit' }, {});
+      assert.strictEqual(result.statusCode, 200);
+      const data = JSON.parse(result.body);
+      assert.strictEqual(data.routes.length, 2, 'two origins should still succeed');
+      assert.ok(!data.routes.some(r => r.origin === '六本木一丁目'), 'failed origin should be absent');
+    });
+  });
+
+  it('rejects an off-allowlist verify_uuid result (SSRF to metadata IP) -> 500', async () => {
+    await withRouter({ verifyBody: 'http://169.254.169.254/latest/meta-data/' }, async () => {
+      const result = await handler({ path: '/transit' }, {});
+      assert.strictEqual(result.statusCode, 500, 'metadata-IP final URL must be rejected at every origin');
     });
   });
 });
