@@ -37,7 +37,7 @@ Resources:
       CodeUri: ./src
       Description: Lambda Function of Roppongi-itchome To TsuTsujigaoka
       MemorySize: 128
-      Timeout: 10
+      Timeout: 15
       Handler: index.handler
       Runtime: nodejs22.x
       Architectures:
