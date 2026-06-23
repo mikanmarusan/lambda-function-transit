@@ -18,7 +18,7 @@ CloudFront + S3 (Frontend) → API Gateway → Lambda → Jorudan
 - **API Gateway routes**: `GET /api/transit`, `GET /api/status`
 - **Region**: `ap-northeast-1`
 
-For the AWS topology diagram, the Jorudan 6-hop `jrd_uuid` cookie handshake, HTML parsing rules, ReDoS/SSRF guards, API path normalization, and the full response schema, see [`docs/architecture.md`](./docs/architecture.md). The diagram source lives at [`docs/diagrams/lambda-function-transit-aws-architecture.drawio`](./docs/diagrams/lambda-function-transit-aws-architecture.drawio).
+For the system overview and AWS topology diagram, start at the [`docs/architecture.md`](./docs/architecture.md) index. The detail specs — the Jorudan 6-hop `jrd_uuid` cookie handshake, HTML parsing rules, ReDoS/SSRF guards, API path normalization, and the full response schema — now live in the per-subsystem docs under `docs/architecture/`. The diagram source lives at [`docs/diagrams/lambda-function-transit-aws-architecture.drawio`](./docs/diagrams/lambda-function-transit-aws-architecture.drawio).
 
 ### Repository Layout
 
@@ -41,7 +41,9 @@ For the AWS topology diagram, the Jorudan 6-hop `jrd_uuid` cookie handshake, HTM
 | Frontend | `frontend/Dockerfile` | Frontend container image |
 | Frontend tests | `frontend/tests/` | Vitest unit tests |
 | Frontend tests | `frontend/tests/e2e/` | Playwright E2E tests |
-| Docs | `docs/architecture.md` | Architecture details, cookie flow, parsing, response schema |
+| Docs | `docs/architecture.md` | Architecture overview/index |
+| Docs | `docs/architecture/` | Per-subsystem detail specs (cookie flow, parsing, API contract, observability, deploy/IAM) |
+| Docs | `docs/adr/` | Architecture Decision Records + `INDEX.md` |
 | Docs | `docs/diagrams/` | AWS architecture diagram (`.drawio` + rendered `.png`) |
 
 ### Frontend Sub-Package Convention
@@ -61,6 +63,16 @@ The `frontend/` directory is a self-contained Vite + React workspace with its ow
 |----------|-------------|
 | `ci.yml` | Test backend/frontend, lint, security check, Docker build |
 | `deploy-production.yml` | Manual production deploy with frontend S3 sync |
+
+## Decision & Spec Docs
+
+This repo runs ADR-driven and spec-driven documentation. The adoption markers below opt the `record ADR` and `sync specs` skills in by naming their targets — keep them as bare, unfenced top-level lines, because a code fence or HTML comment defeats the skills' line matching:
+
+adr-dir: docs/adr
+
+spec-doc: docs/architecture.md
+
+What goes where: [`docs/adr/`](./docs/adr/INDEX.md) records *why* a decision was made (immutable; a PR merge promotes Proposed -> Accepted, via `record ADR`); [`docs/architecture.md`](./docs/architecture.md) plus `docs/architecture/*.md` describe *what the system does now* (tracks code, synced via `sync specs`). ADRs never edit specs and specs never edit ADRs.
 
 ## HOW — Development Workflow
 
