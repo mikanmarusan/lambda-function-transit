@@ -435,11 +435,15 @@ describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router 
     const verifyBody = opts.verifyBody ?? REDIRECT2;
     return mock.fn(async (url, init = {}) => {
       const cookie = (init.headers && init.headers.Cookie) || '';
-      calls.push({ url, headers: init.headers || {} });
+      const method = init.method || 'GET';
+      calls.push({ url, method, headers: init.headers || {}, body: init.body });
       if (url.includes('set_uuid.cgi')) {
+        // Jorudan answers a non-POST (no fingerprint body) with 403 ("./error.html").
+        if (method !== 'POST') return res({ status: 403, body: './error.html' });
         return res({ setCookie: ['jrd_cuid=CUID;path=/jrd_uuid/;max-age=30;Domain=jid.jorudan.co.jp;Secure;HttpOnly'] });
       }
       if (url.includes('verify_uuid.cgi')) {
+        if (method !== 'POST') return res({ status: 403, body: './error.html' });
         if (!cookie.includes('jrd_cuid')) return res({ body: './error.html' });
         return res({ body: verifyBody, setCookie: ['jrd_uuid=UUID;path=/;max-age=31536000;Domain=.jorudan.co.jp;Secure;HttpOnly'] });
       }
@@ -474,15 +478,67 @@ describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router 
     });
   });
 
-  it('sends AJAX headers (Accept */*, Sec-Fetch-Site, jid Referer) to set_uuid', async () => {
+  it('sends AJAX headers (Accept */*, Sec-Fetch-Site, jid origin-root Referer) to set_uuid', async () => {
     await withRouter({}, async (calls) => {
       await handler({ path: '/transit' }, {});
       const ajaxCall = calls.find(c => c.url.includes('set_uuid.cgi'));
       assert.ok(ajaxCall, 'set_uuid.cgi should be called');
       assert.strictEqual(ajaxCall.headers.Accept, '*/*');
       assert.strictEqual(ajaxCall.headers['Sec-Fetch-Site'], 'same-origin');
-      assert.ok(ajaxCall.headers.Referer.includes('jid.jorudan.co.jp'), 'Referer should be the jid page');
+      assert.strictEqual(ajaxCall.headers.Referer, 'https://jid.jorudan.co.jp/', 'Referer should be the jid origin root');
     });
+  });
+
+  it('POSTs set_uuid/verify_uuid with the urlencoded fingerprint body and a ts query param', async () => {
+    await withRouter({}, async (calls) => {
+      await handler({ path: '/transit' }, {});
+      for (const cgi of ['set_uuid.cgi', 'verify_uuid.cgi']) {
+        const ajaxCall = calls.find(c => c.url.includes(cgi));
+        assert.ok(ajaxCall, `${cgi} should be called`);
+        assert.strictEqual(ajaxCall.method, 'POST', `${cgi} must be a POST`);
+        assert.ok(
+          ajaxCall.headers['Content-Type'].includes('application/x-www-form-urlencoded'),
+          `${cgi} must send a form-urlencoded Content-Type`,
+        );
+        const params = new URLSearchParams(ajaxCall.body);
+        for (const key of ['tz', 'lang', 'sw', 'sh', 'cd', 'mem', 'hc', 'ua', 'ts']) {
+          assert.ok(params.has(key), `${cgi} body must carry fingerprint field "${key}"`);
+        }
+        assert.ok(/[?&]ts=/.test(ajaxCall.url), `${cgi} URL must carry a ts query param`);
+      }
+    });
+  });
+
+  it('hops 1/2/5/6 stay GET with no body (only the AJAX hops are POSTs)', async () => {
+    await withRouter({}, async (calls) => {
+      await handler({ path: '/transit' }, {});
+      const nonAjax = calls.filter(c => !c.url.includes('set_uuid.cgi') && !c.url.includes('verify_uuid.cgi'));
+      assert.ok(nonAjax.length > 0, 'non-AJAX hops should be recorded');
+      for (const c of nonAjax) {
+        assert.strictEqual(c.method, 'GET', `non-AJAX hop ${c.url} must remain GET`);
+        assert.strictEqual(c.body, undefined, `non-AJAX hop ${c.url} must not carry a body`);
+      }
+    });
+  });
+
+  it('returns 500 when set_uuid is issued as GET at every origin (regression lock)', async () => {
+    // Force every set_uuid to be a GET by patching fetch to drop the method,
+    // proving the mock's 403-on-GET guard surfaces as an all-origins failure.
+    const calls = [];
+    const original = globalThis.fetch;
+    const router = makeRouter(calls, {});
+    globalThis.fetch = mock.fn((url, init = {}) => {
+      if (typeof url === 'string' && (url.includes('set_uuid.cgi') || url.includes('verify_uuid.cgi'))) {
+        return router(url, { ...init, method: 'GET' });
+      }
+      return router(url, init);
+    });
+    try {
+      const result = await handler({ path: '/transit' }, {});
+      assert.strictEqual(result.statusCode, 500, 'GET-based AJAX hops must fail every origin -> 500');
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 
   it('sends domain-scoped jrd_uuid to the final www request but never the jid-only jrd_cuid', async () => {

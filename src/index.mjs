@@ -94,6 +94,35 @@ const BROWSER_HEADERS = {
 };
 
 /**
+ * Static browser fingerprint posted (urlencoded) to set_uuid/verify_uuid.
+ * Jorudan now expects these AJAX hops to be POSTs carrying the browser's
+ * environment fingerprint; a bare GET is answered with 403 ("./error.html").
+ * Values mirror a real desktop Chrome session; `ua` is derived from
+ * BROWSER_HEADERS so the fingerprint cannot drift internally inconsistent.
+ * Only `ts` (a page-uptime seconds value) is appended dynamically.
+ */
+const FINGERPRINT_FIELDS = {
+  tz: 'Asia/Tokyo',
+  lang: 'ja',
+  sw: '1470',
+  sh: '956',
+  cd: '30',
+  mem: '16',
+  hc: '8',
+  ua: BROWSER_HEADERS['User-Agent'],
+};
+
+/**
+ * Build the urlencoded fingerprint body for the set_uuid/verify_uuid POSTs.
+ * @returns {string} application/x-www-form-urlencoded body
+ */
+function buildFingerprintBody() {
+  const params = new URLSearchParams(FINGERPRINT_FIELDS);
+  params.set('ts', '171.5');  // page-uptime seconds; static value accepted by Jorudan
+  return params.toString();
+}
+
+/**
  * Extract the redirect target from a Jorudan JavaScript redirect page.
  * Handles both single- and double-quoted `window.location.href` assignments and
  * returns the raw URL string (which is now a legitimate absolute cross-host URL
@@ -202,6 +231,7 @@ function buildAjaxHeaders(refererUrl) {
     'User-Agent': BROWSER_HEADERS['User-Agent'],
     'Accept': '*/*',
     'Accept-Language': BROWSER_HEADERS['Accept-Language'],
+    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
     'Referer': refererUrl,
     'Sec-Fetch-Site': 'same-origin',
     'Sec-Fetch-Mode': 'cors',
@@ -212,16 +242,18 @@ function buildAjaxHeaders(refererUrl) {
 /**
  * fetch() bounded by both a per-hop timeout and the remaining origin budget.
  * @param {string} url - URL to fetch
- * @param {Object} opts - { headers, redirect }
+ * @param {Object} opts - { headers, redirect, method, body }
  * @param {number} deadline - Date.now() epoch ms after which the origin budget is spent
  * @returns {Promise<Response>}
  */
-function fetchWithBudget(url, { headers, redirect = 'manual' }, deadline) {
+function fetchWithBudget(url, { headers, redirect = 'manual', method = 'GET', body }, deadline) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) throw new Error('Origin budget exhausted');
   return fetch(url, {
+    method,
     headers,
     redirect,
+    ...(body !== undefined ? { body } : {}),
     signal: AbortSignal.timeout(Math.min(PER_HOP_TIMEOUT_MS, remaining)),
   });
 }
@@ -238,11 +270,11 @@ async function performBotHandshake(originUrl) {
   const jar = new CookieJar();
   const deadline = Date.now() + OVERALL_BUDGET_MS;
 
-  const get = async (urlObj, headers, redirect) => {
+  const get = async (urlObj, headers, redirect, opts = {}) => {
     const cookie = jar.headerFor(urlObj.hostname);
     const res = await fetchWithBudget(
       urlObj.href,
-      { headers: cookie ? { ...headers, Cookie: cookie } : headers, redirect },
+      { headers: cookie ? { ...headers, Cookie: cookie } : headers, redirect, ...opts },
       deadline,
     );
     jar.store(res.headers, urlObj.hostname);
@@ -266,18 +298,25 @@ async function performBotHandshake(originUrl) {
   const r2 = await get(jidUrl, BROWSER_HEADERS, 'manual');
   await r2.text();
 
-  // The AJAX endpoints share the jid page's querystring (?returl=...)
-  const setUrl = isAllowedUrl(`./set_uuid.cgi${jidUrl.search}`, jidUrl.href);
-  const verifyUrl = isAllowedUrl(`./verify_uuid.cgi${jidUrl.search}`, jidUrl.href);
+  // The AJAX endpoints share the jid page's querystring (?returl=...) plus a
+  // `ts` epoch cache-buster. `ts` is appended before isAllowedUrl so the SSRF
+  // chokepoint validates the exact URL that is fetched.
+  const tsParam = `ts=${Date.now() / 1000}`;
+  const sep = jidUrl.search ? '&' : '?';
+  const setUrl = isAllowedUrl(`./set_uuid.cgi${jidUrl.search}${sep}${tsParam}`, jidUrl.href);
+  const verifyUrl = isAllowedUrl(`./verify_uuid.cgi${jidUrl.search}${sep}${tsParam}`, jidUrl.href);
   if (!setUrl || !verifyUrl) throw new Error('Bot check: derived UUID URL not allowed');
-  const ajaxHeaders = buildAjaxHeaders(jidUrl.href);
+  // Real-browser Referer for these AJAX calls is the jid origin root, not the jid page URL.
+  const ajaxHeaders = buildAjaxHeaders(`${jidUrl.origin}/`);
+  // Jorudan now requires set_uuid/verify_uuid to be POSTs carrying the fingerprint body.
+  const fpBody = buildFingerprintBody();
 
   // Hop 3: set_uuid.cgi -> Set-Cookie jrd_cuid (jid-scoped)
-  const r3 = await get(setUrl, ajaxHeaders, 'manual');
+  const r3 = await get(setUrl, ajaxHeaders, 'manual', { method: 'POST', body: fpBody });
   if (!r3.ok) throw new Error(`set_uuid failed: ${r3.status}`);
 
   // Hop 4: verify_uuid.cgi -> plaintext final redirect URL (and Set-Cookie jrd_uuid)
-  const r4 = await get(verifyUrl, ajaxHeaders, 'manual');
+  const r4 = await get(verifyUrl, ajaxHeaders, 'manual', { method: 'POST', body: fpBody });
   if (!r4.ok) throw new Error(`verify_uuid failed: ${r4.status}`);
   const finalRaw = (await r4.text()).trim();
   if (!finalRaw || finalRaw.length > 2048 || /\s/.test(finalRaw)) {
