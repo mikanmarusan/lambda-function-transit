@@ -52,8 +52,9 @@ jobs:
       - name: Smoke test
         run: |
           docker run -d -p 8000:8000 --name dev-test transit-dev
-          for i in {1..30}; do
-            curl -sf http://localhost:8000/status && break || sleep 1
+          for _ in {1..30}; do
+            if curl -sf http://localhost:8000/status; then break; fi
+            sleep 1
           done
           curl -f http://localhost:8000/status || exit 1
           docker stop dev-test
@@ -81,3 +82,12 @@ jobs:
         with:
           use-installer: true
       - run: sam validate --lint
+
+  validate-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: actionlint
+        # Third-party linter pinned to an immutable image tag (smaller surface than
+        # adding a third-party Action). Bump deliberately; new versions add new rules.
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.1 -color

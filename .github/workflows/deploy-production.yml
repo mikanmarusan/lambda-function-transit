@@ -188,6 +188,9 @@ jobs:
           # CFN reports Target.Name = 'DistributionConfig' at the top level, so a per-property
           # WebACLId filter always returns []. The Modify presence + the secret-vs-live check
           # above are the real gates.
+          # The backticks in the --query value are literal JMESPath syntax (a raw-string
+          # comparison), not a shell command substitution, so SC2016 is a false positive here.
+          # shellcheck disable=SC2016
           CF_CHANGE=$(aws cloudformation describe-change-set \
             --change-set-name "$CHANGESET_ARN" \
             --query 'Changes[?ResourceChange.LogicalResourceId==`CloudFrontDistribution`]' \
@@ -215,10 +218,12 @@ jobs:
           DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name transitmikanmarusan --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name transitmikanmarusan --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" --output text)
           API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name transitmikanmarusan --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
-          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
-          echo "distribution_id=$DISTRIBUTION_ID" >> $GITHUB_OUTPUT
-          echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
-          echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
+          {
+            echo "bucket_name=$BUCKET_NAME"
+            echo "distribution_id=$DISTRIBUTION_ID"
+            echo "frontend_url=$FRONTEND_URL"
+            echo "api_endpoint=$API_ENDPOINT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Sync frontend to S3
         if: ${{ github.event.inputs.dry-run != 'true' }}
