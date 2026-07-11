@@ -138,3 +138,7 @@ sam deploy --parameter-overrides "WebACLArn=$WEB_ACL_ARN_PROD"
 ```
 
 The Web ACL itself is **not** managed by this stack (it was created by the CloudFront pricing-plan opt-in). Do not edit the Web ACL attachment in the AWS console — the next CFN deploy will reconcile to whatever ARN is in the secret. If the Web ACL is ever recreated and the ARN changes, update the secret first.
+
+## Lessons
+
+- When authoring an ADR from a planning doc, verify every factual claim against the current code/spec and state present facts as present, proposed changes as proposed. Do not inherit the plan's forward-looking descriptors (e.g. a token value or font stack the plan intends to add) as if they already exist, and do not cite debt/sections that are not actually recorded in the referenced file.
