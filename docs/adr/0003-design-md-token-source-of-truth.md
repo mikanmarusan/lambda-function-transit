@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 applyTo: frontend/**
 ---
 
@@ -8,7 +8,7 @@ applyTo: frontend/**
 # 0003. DESIGN.md frontmatter as the design-token source of truth
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 DESIGN.md D2 (recorded as a design memo in `frontend/DESIGN.md`, not a formal

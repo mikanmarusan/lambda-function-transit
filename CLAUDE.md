@@ -142,3 +142,4 @@ The Web ACL itself is **not** managed by this stack (it was created by the Cloud
 ## Lessons
 
 - When authoring an ADR from a planning doc, verify every factual claim against the current code/spec and state present facts as present, proposed changes as proposed. Do not inherit the plan's forward-looking descriptors (e.g. a token value or font stack the plan intends to add) as if they already exist, and do not cite debt/sections that are not actually recorded in the referenced file.
+- When changing an ADR's `status` in `docs/adr/*.md`, also reconcile the matching `Status` cell in `docs/adr/INDEX.md` in the same PR. A manual edit does not trigger the index regeneration, so leaving it stale ships an index that contradicts the source files.
