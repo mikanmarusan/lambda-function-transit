@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 applyTo: frontend/**
 ---
 
@@ -8,7 +8,7 @@ applyTo: frontend/**
 # 0002. Adopt Vite 8 (Rolldown/Oxc) for the frontend build
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Issue #61 asked to upgrade the frontend `vite` 6 → 8 to clear an `esbuild`

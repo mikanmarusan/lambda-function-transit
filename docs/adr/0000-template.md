@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 applyTo: <repo-relative glob>
 ---
 
@@ -8,7 +8,7 @@ applyTo: <repo-relative glob>
 # NNNN. <Title>
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 <the forces and the problem to solve>
