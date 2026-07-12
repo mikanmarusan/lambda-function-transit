@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: 24a5078 -->
+<!-- spec-synced-through: c45b026 -->
 
 ## 1. Overview
 
@@ -33,6 +33,11 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | `escapeRegExp()` | Escapes dynamic substrings used inside route-parsing regular expressions to prevent ReDoS | `src/index.mjs` |
 | `CookieJar` | Domain-attribute–honouring cookie store built on `Headers.getSetCookie()` | `src/index.mjs` |
 | Local dev server | Serves the unprefixed `/transit` and `/status` paths for local development | `src/dev-server.mjs` |
+| Design token source | YAML frontmatter holding every export-modelable token (colors, typography scale, radii, spacing) | `frontend/DESIGN.md` |
+| `buildTokensCss()` | Runs the pinned local `design.md` bin, rewrites the exporter's Tailwind `@theme {` block into `:root {`, and fails closed rather than writing empty or untransformed output | `frontend/scripts/export-design.mjs` |
+| Generated token stylesheet | The `:root` custom properties exported from the DESIGN.md frontmatter. **Generated — never hand-edited** | `frontend/src/design-tokens.css` |
+| Global stylesheet | Imports the generated tokens, then declares the hand-authored residue (aliases + non-modelable tokens) and the reset/base/focus/scrollbar rules | `frontend/src/index.css` |
+| Token pipeline test | Vitest suite guarding token integrity and generated-file drift (see §7) | `frontend/tests/design-tokens.test.ts` |
 
 ## 4. Data Model
 
@@ -92,11 +97,31 @@ The transit results page is server-rendered HTML. The handler:
 
 Dynamic substrings used inside regular expressions are escaped via `escapeRegExp()` to prevent ReDoS.
 
+### Design Token Generation (build time)
+
+The frontmatter of [`frontend/DESIGN.md`](../frontend/DESIGN.md) is the source of truth for every export-modelable design token. `npm run export:design` (in `frontend/`) runs `node scripts/export-design.mjs`, which:
+
+1. Executes the pinned local bin `frontend/node_modules/.bin/design.md` as `design.md export --format css-tailwind DESIGN.md`.
+2. Rewrites every `@theme {` block the exporter emits into `:root {` — this project does not use Tailwind, and a browser ignores `@theme`, so the custom properties inside it would never register.
+3. Fails closed: it throws instead of writing if no `:root {` block resulted, if an unconverted `@theme` remains, or if the output declares zero `--token:` properties.
+4. Writes the result — prefixed with a `GENERATED FILE - DO NOT EDIT` header naming DESIGN.md as the source — to `frontend/src/design-tokens.css`, which carries `--color-*`, `--text-<level>`, `--font-weight-*`, `--tracking-*`, `--radius-*`, and `--spacing-*`.
+
+`frontend/src/index.css` `@import`s the generated file and then declares the hand-authored residue in a single `:root` block:
+
+- **Alias layer** — maps generated names onto the names the existing `*.module.css` call sites use: `--bg-*`, `--border-*`, `--text-primary/secondary/tertiary`, `--accent-*` (from `--color-*`), `--font-size-*` (from `--text-<level>`, which would otherwise collide with the `--text-*` color family), and `--space-*` (from `--spacing-*`). `--radius-sm/md/lg` need no alias — the export already emits those exact names.
+- **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` / `--font-mono` and the transitions `--transition-fast` / `--transition-normal`.
+
+`npm run lint:design` (`design.md lint DESIGN.md`) lints the source document.
+
 ## 6. External Integrations
 
 ### Jorudan
 
 The upstream Japanese transit search at `www.jorudan.co.jp` (with the UUID handshake on `jid.jorudan.co.jp`). It publishes no API and gates results behind the bot-check handshake detailed in §5.
+
+### `@google/design.md` (build-time tool)
+
+`@google/design.md` is an exact-pinned devDependency of `frontend/` (`"0.3.0"`, no range). It is invoked only through its local bin — the export script resolves `frontend/node_modules/.bin/design.md` by absolute path rather than an unpinned `npx` lookup — and only for two commands: `export --format css-tailwind DESIGN.md` (token generation, §5) and `lint DESIGN.md` (`npm run lint:design`). It is a build/author-time dependency: nothing from it ships in the browser bundle, and the generated stylesheet contains no `@import` or remote `url(...)` reference.
 
 ### Production Deploy Constraint
 
@@ -368,6 +393,17 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - **Timeout budget**: each hop is capped at `PER_HOP_TIMEOUT_MS` (2.5s) and the whole per-origin chain at `OVERALL_BUDGET_MS` (7s), via `AbortSignal.timeout(min(perHop, remaining))`, keeping the 6-hop chain inside the Lambda `Timeout` (15s). The 3 origins run concurrently via `Promise.allSettled`, so one origin failing still returns the others (HTTP 200); all failing returns 500.
 - **ReDoS**: `extractJsRedirect()` uses a non-backtracking negated character class (`[^'"]+`), and dynamic substrings used in route-parsing regexes are escaped via `escapeRegExp()`.
 
+### Design Token Integrity
+
+`frontend/tests/design-tokens.test.ts` (Vitest, run by `npm test` in `frontend/`) imports the same `buildTokensCss()` that `npm run export:design` writes with, so it exercises the real export path rather than a re-implementation. It asserts that:
+
+- every `var(--token)` referenced anywhere under `frontend/src/**/*.css` resolves to a custom property declared at `:root` in either the generated file or `index.css`;
+- no CSS file declares a custom property outside a `:root` block;
+- the alias layer never redeclares a generated token name (a redeclaration would shadow the import and make `--x: var(--x)` a self-referential cycle);
+- every `:root` declaration in `index.css` delegates through `var(--…)` except the four residue tokens (`--font-sans`, `--font-mono`, `--transition-fast`, `--transition-normal`), and `index.css` still imports `./design-tokens.css`;
+- the generated file keeps its `DO NOT EDIT` header, holds a plain `:root {` block with no `@theme`, and pulls in no external `@import` / remote font URL;
+- the committed `design-tokens.css` is **byte-identical** to a fresh export (exact equality, catching hand-edits) and the export is idempotent.
+
 ### Observability
 
 The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable.
@@ -383,5 +419,8 @@ The handler emits structured JSON logs to CloudWatch so each step of the cookie 
 - **WAF Web ACL** — the AWS WAF resource that must stay attached to the CloudFront distribution under its flat-rate pricing plan; ARN held in `WEB_ACL_ARN_PROD`.
 - **OAC** — CloudFront Origin Access Control, fronting the S3 origin.
 - **`gh-actions-deploy-prod`** — the GitHub OIDC IAM role assumed by the `Deploy to Production` workflow; backed by the least-privilege `gh-actions-deploy-prod-leastpriv` policy.
+- **DESIGN.md** — `frontend/DESIGN.md`; its YAML frontmatter is the source of truth for the export-modelable design tokens.
+- **`design-tokens.css`** — `frontend/src/design-tokens.css`, generated from the DESIGN.md frontmatter by `npm run export:design`. Never hand-edited.
+- **Residue layer** — the hand-authored `:root` block in `frontend/src/index.css`: aliases from the generated token names onto the names call sites use, plus the tokens the exporter cannot model (font stacks, transitions).
 - **SSRF** — Server-Side Request Forgery; mitigated by `isAllowedUrl()`.
 - **ReDoS** — Regular-expression Denial of Service; mitigated by `escapeRegExp()` and non-backtracking patterns.

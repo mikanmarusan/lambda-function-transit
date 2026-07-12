@@ -1,49 +1,75 @@
+/* ==========================================================================
+   1. GENERATED IMPORT
+   Tokens exported from DESIGN.md frontmatter (npm run export:design).
+   Defines --color-*, --text-<level>, --font-weight-*, --tracking-*,
+   --radius-*, --spacing-*. Never edit src/design-tokens.css by hand.
+   ========================================================================== */
+@import './design-tokens.css';
+
+/* ==========================================================================
+   2. HAND-AUTHORED RESIDUE
+   2a. Alias layer: maps generated token names onto the names the existing
+       *.module.css call sites already use, so no var(--...) reference changes.
+       --radius-sm/md/lg need no alias: the export already emits those exact names.
+       The font-size scale does get an alias (--font-size-*): the exporter emits it
+       as --text-<level>, which would collide with the --text-primary/secondary/
+       tertiary color family and make `color: var(--text-sm)` a silent no-op.
+   2b. Residue proper: tokens @google/design.md cannot express (multi-family
+       font stacks, transitions). These are the source of truth for themselves.
+   ========================================================================== */
 :root {
-  /* Colors - Dark theme */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-tertiary: #171717;
-  --bg-elevated: #1a1a1a;
+  /* 2a. Aliases - Colors */
+  --bg-primary: var(--color-bg-primary);
+  --bg-secondary: var(--color-bg-secondary);
+  --bg-tertiary: var(--color-bg-tertiary);
+  --bg-elevated: var(--color-bg-elevated);
 
-  --border-primary: #262626;
-  --border-secondary: #333333;
-  --border-accent: #3b82f6;
+  --border-primary: var(--color-border-primary);
+  --border-secondary: var(--color-border-secondary);
+  --border-accent: var(--color-border-accent);
 
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1a1;
-  --text-tertiary: #737373;
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
 
-  --accent-blue: #3b82f6;
-  --accent-blue-hover: #2563eb;
-  --accent-green: #22c55e;
-  --accent-red: #ef4444;
-  --accent-yellow: #eab308;
+  --accent-blue: var(--color-accent-blue);
+  --accent-blue-hover: var(--color-accent-blue-hover);
+  --accent-green: var(--color-accent-green);
+  --accent-red: var(--color-accent-red);
+  --accent-yellow: var(--color-accent-yellow);
 
-  /* Typography */
+  /* 2a. Aliases - Font size scale (call sites use --font-size-*, never --text-* sizes) */
+  --font-size-xs: var(--text-xs);
+  --font-size-sm: var(--text-sm);
+  --font-size-base: var(--text-base);
+  --font-size-md: var(--text-md);
+  --font-size-lg: var(--text-lg);
+  --font-size-xl: var(--text-xl);
+  --font-size-2xl: var(--text-2xl);
+
+  /* 2a. Aliases - Spacing (4px grid) */
+  --space-1: var(--spacing-1);
+  --space-2: var(--spacing-2);
+  --space-3: var(--spacing-3);
+  --space-4: var(--spacing-4);
+  --space-5: var(--spacing-5);
+  --space-6: var(--spacing-6);
+  --space-8: var(--spacing-8);
+  --space-10: var(--spacing-10);
+  --space-12: var(--spacing-12);
+
+  /* 2b. Residue - Typography (multi-family fallback chains are not exportable) */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
 
-  /* Spacing (4px grid) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-
-  /* Border radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-
-  /* Transitions */
+  /* 2b. Residue - Transitions (no such category in the export schema) */
   --transition-fast: 100ms ease;
   --transition-normal: 150ms ease;
 }
 
+/* ==========================================================================
+   3. RESET / BASE / FOCUS / SCROLLBAR (hand-authored)
+   ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
