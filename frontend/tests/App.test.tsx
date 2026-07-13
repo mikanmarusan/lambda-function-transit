@@ -114,3 +114,50 @@ describe('App content branches', () => {
     expect(screen.getByRole('alert').textContent).toContain(ERROR)
   })
 })
+
+describe('App accessibility affordances', () => {
+  it('keeps the branch container a polite live region so a swapped branch is announced', () => {
+    // The four branches are condition-mounted siblings; only a container that outlives them can
+    // announce the swap, so the live region lives on .content, not on the branch nodes.
+    mockTransit()
+    const { container } = render(<App />)
+
+    const live = container.querySelector('[aria-live="polite"]')
+    expect(live).not.toBeNull()
+    expect(live!.textContent).toContain(EMPTY)
+  })
+
+  it('renders a Tray glyph in the empty card, not the error red', () => {
+    mockTransit()
+    const { container } = render(<App />)
+
+    const emptyCard = screen.getByRole('status')
+    // Phosphor renders an <svg>; the icon is decorative next to the microcopy.
+    expect(emptyCard.querySelector('svg')).not.toBeNull()
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('marks the refresh button busy only while a fetch is in flight', () => {
+    mockTransit({ loading: true, lastUpdated: null })
+    const { unmount } = render(<App />)
+    expect(screen.getByRole('button', { name: 'Refresh' }).getAttribute('aria-busy')).toBe('true')
+    unmount()
+
+    mockTransit()
+    render(<App />)
+    expect(screen.getByRole('button', { name: 'Refresh' }).getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('exposes tab selection through aria-pressed', () => {
+    mockTransit({
+      originRoutes: [
+        ...routes,
+        { origin: '東京', destination: 'つつじヶ丘', transfers: [] },
+      ],
+    })
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: '六本木一丁目' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: '東京' }).getAttribute('aria-pressed')).toBe('false')
+  })
+})

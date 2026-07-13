@@ -71,16 +71,24 @@
   padding-bottom: var(--space-1);
 }
 
+/* CJK body text (station and line names): kinsoku on, no letter-spacing, and never break-all /
+   break-word - those are reserved for the raw <pre> fallback below (Typography). */
 .station {
   color: var(--text-primary);
   font-size: var(--font-size-base);
   font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
 .stationIntermediate {
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
 .lineName {
@@ -88,6 +96,9 @@
   font-size: var(--font-size-xs);
   padding-left: var(--space-2);
   border-left: 2px solid var(--border-secondary);
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
 .rawRoute {

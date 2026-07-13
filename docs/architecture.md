@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: 4f48966 -->
+<!-- spec-synced-through: c900150 -->
 
 ## 1. Overview
 
@@ -38,7 +38,8 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Generated token stylesheet | The `:root` custom properties exported from the DESIGN.md frontmatter. **Generated — never hand-edited** | `frontend/src/design-tokens.css` |
 | Global stylesheet | Imports the generated tokens, then declares the hand-authored residue (aliases + non-modelable tokens) and the reset/base/focus/scrollbar rules | `frontend/src/index.css` |
 | Token pipeline test | Vitest suite guarding token integrity and generated-file drift (see §7) | `frontend/tests/design-tokens.test.ts` |
-| App render-branch test | Vitest + Testing Library suite pinning the four content branches and their ARIA roles (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
+| App render-branch test | Vitest + Testing Library suite pinning the four content branches, their ARIA roles, and the accessibility affordances (`aria-live` wrapper, `aria-busy`, `aria-pressed`) (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
+| Frontend E2E suite | Playwright suite that stubs the API with `page.route` and pins the rendered accessibility / touch-target / motion / typography contract in a real browser (see §7) | `frontend/tests/e2e/transit.spec.ts`, `frontend/playwright.config.ts` |
 
 ## 4. Data Model
 
@@ -100,16 +101,20 @@ Dynamic substrings used inside regular expressions are escaped via `escapeRegExp
 
 ### Frontend Render Branches
 
-`frontend/src/App.tsx` renders the fetched routes through four content branches, each keyed off the `useTransit()` state (`originRoutes`, `loading`, `error`, `lastUpdated`):
+`frontend/src/App.tsx` renders the fetched routes through four content branches, each keyed off the `useTransit()` state (`originRoutes`, `loading`, `error`, `lastUpdated`). The three *status* branches are wrapped in a single, unconditionally mounted `<div aria-live="polite">`; the cards render as a sibling **outside** that region:
 
-| Branch | Condition | Rendered |
-| --- | --- | --- |
-| Error | `error` | Error banner `Failed to load transit information`, `role="alert"` |
-| Loading | `!error && activeRoutes.length === 0 && loading` | `Spinner` + `Loading transit information...` |
-| Empty | `!error && !loading && lastUpdated && activeRoutes.length === 0` | Empty-state card `No departures found`, `role="status"` |
-| Cards | `!error && activeRoutes.length > 0` | `TransitCard` per route |
+| Branch | Condition | Rendered | Live region |
+| --- | --- | --- | --- |
+| Error | `error` | Error banner `Failed to load transit information`, `role="alert"` | inside |
+| Loading | `!error && activeRoutes.length === 0 && loading` | `Spinner` + `Loading transit information...` | inside |
+| Empty | `!error && !loading && lastUpdated && activeRoutes.length === 0` | Empty-state card: `Tray` glyph (`--text-tertiary`, never the error red) + `No departures found`, `role="status"` | inside |
+| Cards | `!error && activeRoutes.length > 0` | `TransitCard` per route | outside |
 
-The empty state is gated on `lastUpdated` (set only by a completed fetch), not merely on `!loading`: `useTransit` starts with `loading === false`, so without the guard the first paint — before the fetch effect runs — would satisfy `!loading && routes.length === 0` and flash the empty card on every visit. `frontend/tests/App.test.tsx` pins all four branches, that pre-fetch instant, and the two ARIA roles.
+The status branches are condition-mounted, so the live region must be a container that outlives them — a role on the branch node itself is announced only by some assistive tech. When no status branch is active the wrapper stays in the DOM as an **empty, zero-height box**: it is never `display: none`, which would prune it from the accessibility tree and leave it no better than a conditionally mounted region. Its parent `.content` therefore declares no `gap` — the wrapper and the cards are mutually exclusive, so a gap could only reserve a phantom row above the cards. The cards sit outside the region deliberately: inside it, every tab switch would re-announce the whole timetable.
+
+The empty state is gated on `lastUpdated` (set only by a completed fetch), not merely on `!loading`: `useTransit` starts with `loading === false`, so without the guard the first paint — before the fetch effect runs — would satisfy `!loading && routes.length === 0` and flash the empty card on every visit.
+
+The controls expose their own state: each origin tab carries `aria-pressed` (`origin === activeOrigin`), and the refresh button carries `aria-busy={loading}` alongside its `aria-label="Refresh"` and `disabled={loading}`. `frontend/tests/App.test.tsx` pins all four branches, that pre-fetch instant, the two ARIA roles, and the `aria-live` / `aria-busy` / `aria-pressed` attributes.
 
 Phosphor icon dimensions are passed as the component's `size` prop, never as CSS `font-size` — including `StatusIndicator`'s `Circle` (`size={10}`) and `Warning` (`size={12}`), whose `.icon*` classes carry colour and motion only. Icon glyph sizes therefore sit outside the type scale by construction (they are not text), which is what lets §7's call-site-hygiene check forbid raw `px` font sizes outright.
 
@@ -426,6 +431,28 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - **`--font-sans` carries a CJK face**, ordered Latin → CJK → generic;
 - **WCAG AA contrast**: `--text-tertiary` clears 4.5:1 on `bg-primary`/`secondary`/`tertiary`, the error banner's text clears 4.5:1 against its *composited* translucent tint, and the empty-state text clears 4.5:1 on its elevated card. A negative control asserts the pre-ADR value (`#737373`) still fails, so the ratio maths cannot go vacuously green;
 - **`design.md lint` reports zero errors and zero warnings** — this runs the pinned local bin from the test suite, so the frontmatter's lint cleanliness is enforced by `npm test` (which CI runs) rather than only by hand.
+
+### Frontend Accessibility & Responsive Conventions
+
+Rules that hold across the frontend's stylesheets, not just one component:
+
+- **Touch targets — 44×44 minimum.** The visible box and the hit area may differ. `.refreshButton` keeps its 32×32 painted box and grows *only* its hit area, through a transparent, centred `::after` of 44×44 (the button is `position: relative`); a pseudo-element takes no outline, so `:focus-visible` still traces the button's own 32×32 border box rather than the expanded hit area. Origin tabs take the other route and grow the visible control: `inline-flex` + `min-width`/`min-height: 44px`. `.tab` must also declare `flex: 0 0 auto`, because `min-width: 44px` *replaces* a flex item's default `min-width: auto` (its content-width floor) — without it a crowded strip would squeeze every tab to 44px and spill its `nowrap` label over its neighbours instead of letting `.tabs { overflow-x: auto }` scroll. `.routeHeader`'s `gap` is load-bearing for the same reason: the refresh button's hit area overhangs its visual box by 6px per side, so the gap must stay ≥ `--space-2` or it would swallow clicks aimed at the last tab.
+- **Reduced motion.** Under `@media (prefers-reduced-motion: reduce)`, the `spin` animation on `.spinner` (`App.module.css`, used by both the loading branch and the in-flight refresh button) becomes `animation: none`, and `StatusIndicator`'s `pulse` dot becomes `animation: none; opacity: 1` — pinned opaque rather than frozen at the keyframe's `0.3`. Both animations are decorative; the adjacent label and `aria-busy` still carry the state.
+- **CJK typography.** Japanese labels — `.tab` and `.station` in `App.module.css`, `.station` / `.stationIntermediate` / `.lineName` in `RouteDetail.module.css` — declare `line-height: 1.6` (overriding the `1.5` base), `word-break: normal`, and `line-break: strict`, and take no `letter-spacing` (tracking stays Latin/numeral-only). `word-break: break-word` is confined to `.rawRoute`, the raw `<pre>` fallback, so a station or line name never breaks mid-glyph.
+- **A single breakpoint.** The only dimensional media query in the frontend is `@media (max-width: 480px)` in `frontend/src/components/TransitCard.module.css` (the card's internal reflow); every other component is fluid. `prefers-reduced-motion` is not a dimensional media feature, so it is outside this convention.
+
+### Frontend E2E Suite
+
+`frontend/tests/e2e/transit.spec.ts` runs under Playwright (`npm run test:e2e` in `frontend/`; `@playwright/test` is a devDependency). `frontend/playwright.config.ts` targets chromium + Pixel 5 and starts `npm run dev` on `http://localhost:3000` as its `webServer`. Every test stubs `/api/status` and `/api/transit` at the network layer with `page.route`, so the suite runs against the Vite dev server alone — no Lambda, no Jorudan, no docker-compose — and each state (populated / empty / error / in-flight) is a fixture rather than whatever the scraper happens to return. It pins:
+
+- the header, status indicator, refresh button, cards, and footer chrome, plus `aria-pressed` flipping when a tab is clicked;
+- the empty state (`Tray` glyph, no error banner, no cards) and the live region: exactly one `[aria-live="polite"]` node, containing no cards, and — while cards are showing — computing a `display` other than `none` at a `0`-height box;
+- the 44×44 hit areas, measured by probing `document.elementFromPoint` outwards from each control's centre (`boundingBox()` cannot see the `::after`), plus that a crowded tab strip scrolls rather than clipping its labels;
+- `animation-name: none` for the spinner and the pulse dot under an emulated `reducedMotion: 'reduce'`, and that both animate when no preference is set;
+- the computed CJK values (`line-break`, line-height ratio, `letter-spacing`, `word-break`) and that `break-word` reaches `.rawRoute` alone;
+- the computed accent/surface colors of the arrival time, the error banner, and the empty card.
+
+CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but **does not run Playwright** — the E2E suite is a local gate.
 
 ### Observability
 
