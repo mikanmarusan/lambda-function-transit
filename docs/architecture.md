@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: c45b026 -->
+<!-- spec-synced-through: 4f48966 -->
 
 ## 1. Overview
 
@@ -38,6 +38,7 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Generated token stylesheet | The `:root` custom properties exported from the DESIGN.md frontmatter. **Generated — never hand-edited** | `frontend/src/design-tokens.css` |
 | Global stylesheet | Imports the generated tokens, then declares the hand-authored residue (aliases + non-modelable tokens) and the reset/base/focus/scrollbar rules | `frontend/src/index.css` |
 | Token pipeline test | Vitest suite guarding token integrity and generated-file drift (see §7) | `frontend/tests/design-tokens.test.ts` |
+| App render-branch test | Vitest + Testing Library suite pinning the four content branches and their ARIA roles (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
 
 ## 4. Data Model
 
@@ -96,6 +97,21 @@ The transit results page is server-rendered HTML. The handler:
 - Returns up to `MAX_CANDIDATES` (`2`) routes.
 
 Dynamic substrings used inside regular expressions are escaped via `escapeRegExp()` to prevent ReDoS.
+
+### Frontend Render Branches
+
+`frontend/src/App.tsx` renders the fetched routes through four content branches, each keyed off the `useTransit()` state (`originRoutes`, `loading`, `error`, `lastUpdated`):
+
+| Branch | Condition | Rendered |
+| --- | --- | --- |
+| Error | `error` | Error banner `Failed to load transit information`, `role="alert"` |
+| Loading | `!error && activeRoutes.length === 0 && loading` | `Spinner` + `Loading transit information...` |
+| Empty | `!error && !loading && lastUpdated && activeRoutes.length === 0` | Empty-state card `No departures found`, `role="status"` |
+| Cards | `!error && activeRoutes.length > 0` | `TransitCard` per route |
+
+The empty state is gated on `lastUpdated` (set only by a completed fetch), not merely on `!loading`: `useTransit` starts with `loading === false`, so without the guard the first paint — before the fetch effect runs — would satisfy `!loading && routes.length === 0` and flash the empty card on every visit. `frontend/tests/App.test.tsx` pins all four branches, that pre-fetch instant, and the two ARIA roles.
+
+Phosphor icon dimensions are passed as the component's `size` prop, never as CSS `font-size` — including `StatusIndicator`'s `Circle` (`size={10}`) and `Warning` (`size={12}`), whose `.icon*` classes carry colour and motion only. Icon glyph sizes therefore sit outside the type scale by construction (they are not text), which is what lets §7's call-site-hygiene check forbid raw `px` font sizes outright.
 
 ### Design Token Generation (build time)
 
