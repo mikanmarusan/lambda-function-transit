@@ -64,7 +64,7 @@ function App() {
 
           <div className={styles.content}>
             {error && (
-              <div className={styles.error}>
+              <div className={styles.error} role="alert">
                 <span>Failed to load transit information</span>
               </div>
             )}
@@ -73,6 +73,14 @@ function App() {
               <div className={styles.loading}>
                 <Spinner size={24} className={styles.spinner} />
                 <span>Loading transit information...</span>
+              </div>
+            )}
+
+            {/* Empty state. Gated on lastUpdated: it is set only by a completed fetch, so
+                the card cannot flash on the first paint (loading starts false). */}
+            {!error && !loading && lastUpdated && activeRoutes.length === 0 && (
+              <div className={styles.empty} role="status">
+                <span>No departures found</span>
               </div>
             )}
 

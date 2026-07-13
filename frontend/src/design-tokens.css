@@ -9,15 +9,15 @@
   --color-bg-elevated: #1a1a1a;
   --color-border-primary: #262626;
   --color-border-secondary: #333333;
-  --color-border-accent: #3b82f6;
   --color-text-primary: #fafafa;
   --color-text-secondary: #a1a1a1;
-  --color-text-tertiary: #737373;
+  --color-text-tertiary: #8a8a8a;
   --color-accent-blue: #3b82f6;
   --color-accent-blue-hover: #2563eb;
   --color-accent-green: #22c55e;
   --color-accent-red: #ef4444;
-  --color-accent-yellow: #eab308;
+  --color-accent-red-tint: #ef44441a;
+  --color-accent-red-tint-border: #ef444433;
   --color-primary: #3b82f6;
   --text-xs: 11px;
   --text-sm: 12px;

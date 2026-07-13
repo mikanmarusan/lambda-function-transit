@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -33,12 +34,54 @@ const allCss = cssFiles.map((file) => readFileSync(file, 'utf-8')).join('\n')
 const indexCss = readFileSync(indexCssPath, 'utf-8')
 const generatedCss = readFileSync(generatedPath, 'utf-8')
 
+/** The DESIGN.md YAML frontmatter - the half of the doc the exporter actually reads. */
+const designMd = readFileSync(join(root, 'DESIGN.md'), 'utf-8')
+const frontmatter = /^---\n([\s\S]*?)\n---/.exec(designMd)?.[1] ?? ''
+
 /** Tokens the hand-authored residue owns outright: they hold literals, not var() aliases. */
-const RESIDUE_TOKENS = new Set([
-  '--font-sans',
-  '--font-mono',
-  '--transition-fast',
-  '--transition-normal',
+const RESIDUE_TOKENS = new Set(['--font-sans', '--font-mono', '--transition-fast'])
+
+/**
+ * Scale rungs are a deliberately complete vocabulary (DESIGN.md Layout documents the whole
+ * 4px grid, gaps included), so an unused rung is a vacancy, not an orphan. Role tokens -
+ * which encode a design commitment - get no such licence, hence Tech Debt #4.
+ */
+const SCALE_PREFIXES = ['--space-']
+
+/** Tokens deleted by Tech Debt #4: no role, so no reason to exist anywhere in the pipeline. */
+const DELETED_TOKENS = ['--border-accent', '--accent-yellow', '--transition-normal']
+
+/**
+ * Generated tokens with no var() call site, allowed by name so that the orphan gate can cover
+ * the generated layer too (an unreviewed exception is how the reserved-slot trick crept in).
+ * - --color-primary: the `primary` colour role @google/design.md requires; the UI references
+ *   the same value as --accent-blue.
+ * - --font-weight-* / --tracking-*: emitted per typography level. Call sites still write
+ *   `font-weight: 600` / `letter-spacing: -0.02em` literally; wiring them up is a separate change.
+ */
+const UNREFERENCED_GENERATED = new Set([
+  '--color-primary',
+  '--font-weight-xs',
+  '--font-weight-sm',
+  '--font-weight-base',
+  '--font-weight-md',
+  '--font-weight-lg',
+  '--font-weight-xl',
+  '--font-weight-2xl',
+  '--tracking-lg',
+  '--tracking-xl',
+  '--tracking-2xl',
+])
+
+/** The font-size scale, as the call sites must name it (never the generated --text-* names). */
+const FONT_SIZE_ALIASES = new Set([
+  '--font-size-xs',
+  '--font-size-sm',
+  '--font-size-base',
+  '--font-size-md',
+  '--font-size-lg',
+  '--font-size-xl',
+  '--font-size-2xl',
 ])
 
 /** Drops /* ... *\/ comments so a commented-out example is never read as a declaration. */
@@ -51,6 +94,16 @@ function declaredTokens(css: string): string[] {
   return [...stripComments(css).matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1])
 }
 
+/**
+ * Tokens actually referenced by a live `var()`. Comments are stripped first: a commented-out
+ * `var(--x)` is not a call site, and counting it as one would let a role-less token survive the
+ * orphan gates on the strength of a mention in prose - the same silent survival the reserved
+ * slots used to buy.
+ */
+const referencedTokens = new Set(
+  [...stripComments(allCss).matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1])
+)
+
 /** The bodies of every `:root { ... }` block in a stylesheet. */
 function rootBlocks(css: string): string[] {
   return [...stripComments(css).matchAll(/:root\s*\{([\s\S]*?)\}/g)].map((match) => match[1])
@@ -61,13 +114,56 @@ function globallyDeclaredTokens(css: string): string[] {
   return rootBlocks(css).flatMap(declaredTokens)
 }
 
-/** `--name: value;` pairs declared at :root. */
+/**
+ * `--name: value` pairs declared at :root. Terminates on `}` as well as `;`, because the last
+ * declaration in a block may legally omit its semicolon - and a `;`-only regex would make that
+ * one declaration invisible to the orphan and hard-coded-value gates.
+ */
 function rootDeclarations(css: string): Array<[string, string]> {
   return rootBlocks(css).flatMap((body) =>
-    [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(
+    [...body.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)[;}]?/g)].map(
       (match) => [match[1], match[2].trim()] as [string, string]
     )
   )
+}
+
+/** `#rrggbb` or `#rrggbbaa` -> [r, g, b, a], channels 0-255 and alpha 0-1. */
+function parseHex(hex: string): [number, number, number, number] {
+  const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(hex.trim())
+  if (!match) throw new Error(`not a 6- or 8-digit hex colour: ${hex}`)
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(match[1].slice(i, i + 2), 16))
+  return [r, g, b, match[2] === undefined ? 1 : parseInt(match[2], 16) / 255]
+}
+
+/** Source-over compositing: what a translucent colour actually renders as on a substrate. */
+function composite(fg: string, bg: string): [number, number, number, number] {
+  const [fr, fg_, fb, fa] = parseHex(fg)
+  const [br, bg_, bb] = parseHex(bg)
+  const mix = (f: number, b: number) => Math.round(fa * f + (1 - fa) * b)
+  return [mix(fr, br), mix(fg_, bg_), mix(fb, bb), 1]
+}
+
+/** WCAG 2.1 relative luminance. */
+function luminance([r, g, b]: [number, number, number, number]): number {
+  const [lr, lg, lb] = [r, g, b].map((channel) => {
+    const c = channel / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb
+}
+
+/** WCAG 2.1 contrast ratio. Both colours must already be opaque (composite() first). */
+function contrastRatio(fg: [number, number, number, number], bg: [number, number, number, number]): number {
+  const [hi, lo] = [luminance(fg), luminance(bg)].sort((a, b) => b - a)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** Resolves a generated token (e.g. `--color-text-tertiary`) to its literal value. */
+const generatedValues = new Map(rootDeclarations(generatedCss))
+function token(name: string): string {
+  const value = generatedValues.get(name)
+  if (value === undefined) throw new Error(`token not defined in design-tokens.css: ${name}`)
+  return value
 }
 
 describe('design token pipeline', () => {
@@ -84,13 +180,10 @@ describe('design token pipeline', () => {
       ...globallyDeclaredTokens(generatedCss),
       ...globallyDeclaredTokens(indexCss),
     ])
-    const referenced = new Set(
-      [...allCss.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1])
-    )
 
-    const unresolved = [...referenced].filter((token) => !defined.has(token)).sort()
+    const unresolved = [...referencedTokens].filter((token) => !defined.has(token)).sort()
     expect(unresolved).toEqual([])
-    expect(referenced.size).toBeGreaterThan(0)
+    expect(referencedTokens.size).toBeGreaterThan(0)
   })
 
   it('declares tokens only at :root, never under a scoped selector', () => {
@@ -145,5 +238,195 @@ describe('design token pipeline', () => {
     expect(second).toBe(first)
     // Exact equality (not toContain): catches hand-edits appended to the generated file.
     expect(generatedCss).toBe(first)
+  }, 30_000)
+})
+
+describe('token roles (Tech Debt #4)', () => {
+  const referenced = referencedTokens
+
+  it('declares no orphaned role token - every call-site token has a call site', () => {
+    const orphans = rootDeclarations(indexCss)
+      .map(([name]) => name)
+      .filter((name) => !referenced.has(name))
+      .filter((name) => !SCALE_PREFIXES.some((prefix) => name.startsWith(prefix)))
+      .sort()
+
+    expect(orphans).toEqual([])
+  })
+
+  it('declares no orphaned generated token outside the documented allowlist', () => {
+    // The generated layer needs its own gate: design.md's own orphaned-tokens warning is
+    // satisfied by *any* components: entry, which is exactly the reserved-slot trick this
+    // change abolished. Nothing else would stop a role-less token being re-added upstream.
+    const orphans = globallyDeclaredTokens(generatedCss)
+      .filter((name) => !referenced.has(name))
+      .filter((name) => !UNREFERENCED_GENERATED.has(name))
+      .sort()
+
+    expect(orphans).toEqual([])
+  })
+
+  it('keeps the allowlist honest - every allowlisted token is really declared and unreferenced', () => {
+    // Stops the allowlist rotting into a place where deleted names accumulate, or where a
+    // token that has since gained a call site is still (misleadingly) excused.
+    const generated = new Set(globallyDeclaredTokens(generatedCss))
+    for (const name of UNREFERENCED_GENERATED) {
+      expect(generated.has(name), `allowlisted ${name} is not a generated token`).toBe(true)
+      expect(referenced.has(name), `allowlisted ${name} now has a call site - drop it`).toBe(false)
+    }
+  })
+
+  it('has purged the deleted tokens from every layer of the pipeline', () => {
+    // The frontmatter too, not just the CSS: a colour deleted from index.css but left in the
+    // frontmatter would be re-emitted into design-tokens.css by the next export. Prose is
+    // excluded on purpose - the doc still discusses these tokens, it just no longer defines them.
+    expect(frontmatter, 'frontmatter failed to parse - the check below would be vacuous').toContain(
+      'colors:'
+    )
+    const css = stripComments(allCss)
+    for (const name of DELETED_TOKENS) {
+      const bare = name.replace(/^--/, '')
+      // Both spellings: a re-added colour reaches CSS as the *generated* name (--color-accent-yellow),
+      // which does not contain the alias name (--accent-yellow) as a substring. Checking only the
+      // alias would miss it. The frontmatter check is what actually catches a re-added colour,
+      // since a deleted colour can only come back by being re-declared there.
+      expect(css, `${name} still declared/referenced in CSS`).not.toContain(name)
+      expect(css, `--color-${bare} still declared/referenced in CSS`).not.toContain(`--color-${bare}`)
+      expect(frontmatter, `${bare} still defined in the DESIGN.md frontmatter`).not.toContain(bare)
+    }
+  })
+})
+
+describe('call-site hygiene', () => {
+  it('sizes text only from the font-size scale, never a raw px (Tech Debt #2)', () => {
+    // Every stylesheet, not just the modules: index.css has real rule bodies too, where a raw
+    // font-size would otherwise be caught by nothing. Two exclusions: the generated file (its
+    // --text-* rungs *are* the scale) and the `html` rem base (`font-size: 14px`), which is the
+    // root the scale is measured from and so cannot itself be expressed as a scale token.
+    const scanned = cssFiles.filter((file) => file !== generatedPath)
+    const offenders = scanned.flatMap((file) => {
+      // Comments stripped first, or documenting a removed `font-size: 12px` in prose would
+      // register as an offender. Terminate on `}` as well as `;`: the last declaration in a
+      // block may legally omit its semicolon, and a `;`-only regex would skip exactly that case.
+      const css = stripComments(readFileSync(file, 'utf-8')).replace(/\bhtml\s*\{[\s\S]*?\}/g, '')
+      const sizes = [...css.matchAll(/font-size:\s*([^;}]+)[;}]/g)]
+        .map((match) => match[1].trim())
+        .filter((value) => {
+          const alias = /^var\(\s*(--[\w-]+)\s*\)$/.exec(value)
+          return alias === null || !FONT_SIZE_ALIASES.has(alias[1])
+        })
+        .map((value) => `${file}: font-size: ${value}`)
+
+      // The `font:` shorthand can smuggle a size past the check above (`font: 600 14px/1.5 …`).
+      // `font: inherit` carries none, and is the only form the codebase uses.
+      const shorthand = [...css.matchAll(/(?<!-)\bfont:\s*([^;}]+)[;}]/g)]
+        .map((match) => match[1].trim())
+        .filter((value) => value !== 'inherit')
+        .map((value) => `${file}: font: ${value}`)
+
+      return [...sizes, ...shorthand]
+    })
+
+    expect(offenders).toEqual([])
+    // Guards the exclusion above: if the rem base ever stops being an `html` rule, the strip
+    // would silently start hiding real offenders instead of just this one.
+    expect(indexCss).toMatch(/\bhtml\s*\{[^}]*font-size:\s*14px/)
+  })
+
+  it('writes no raw rgba()/hex colour outside the generated file (Tech Debt #3)', () => {
+    // Every stylesheet, not just the modules: index.css has real rule bodies too (body,
+    // scrollbar), and the alias-layer test only inspects its :root block - so a raw hex in
+    // `body { color: #fff }` would otherwise be caught by nothing. :root blocks are excluded
+    // because the residue legitimately holds literals (font stacks, durations), and the
+    // generated file is excluded because holding the hex values is its entire job.
+    const offenders = cssFiles
+      .filter((file) => file !== generatedPath)
+      .filter((file) => {
+        const body = stripComments(readFileSync(file, 'utf-8')).replace(/:root\s*\{[\s\S]*?\}/g, '')
+        return /rgba?\(|hsla?\(|oklch\(|#[0-9a-f]{3,8}\b/i.test(body)
+      })
+
+    expect(offenders).toEqual([])
+    // The error tint specifically: the literal this issue set out to remove.
+    expect(readFileSync(join(srcDir, 'App.module.css'), 'utf-8')).not.toContain('rgba(239')
+  })
+
+  it('carries a CJK face in --font-sans and loads no webfont (Tech Debt #1)', () => {
+    const fontSans = new Map(rootDeclarations(indexCss)).get('--font-sans') ?? ''
+
+    expect(fontSans).toContain('Hiragino Sans')
+    expect(fontSans).toContain('Noto Sans JP')
+    // CJK face must come after the Latin faces and before the generic, or Latin text
+    // would be rendered by the Japanese face.
+    expect(fontSans.indexOf('Inter')).toBeLessThan(fontSans.indexOf('Hiragino Sans'))
+    expect(fontSans.indexOf('Hiragino Sans')).toBeLessThan(fontSans.indexOf('sans-serif'))
+    // No CDN webfont, anywhere (Agent Prompt Guide security rule). Comments are stripped so
+    // that prose *about* @font-face does not read as an @font-face rule.
+    expect(stripComments(allCss)).not.toMatch(
+      /@font-face|fonts\.(googleapis|gstatic)|url\(\s*['"]?https?:/i
+    )
+  })
+})
+
+describe('WCAG AA contrast (ADR 0003 D-E)', () => {
+  it.each(['--color-bg-primary', '--color-bg-secondary', '--color-bg-tertiary'])(
+    'renders --text-tertiary at >= 4.5:1 on %s',
+    (background) => {
+      const ratio = contrastRatio(parseHex(token('--color-text-tertiary')), parseHex(token(background)))
+      expect(ratio).toBeGreaterThanOrEqual(4.5)
+    }
+  )
+
+  it('renders the error banner text at >= 4.5:1 over its composited tint', () => {
+    // The tint is translucent, so the real substrate is the tint composited over the page
+    // ground. design.md's own contrast lint is not alpha-aware and cannot check this.
+    const surface = composite(token('--color-accent-red-tint'), token('--color-bg-primary'))
+    const ratio = contrastRatio(parseHex(token('--color-accent-red')), surface)
+
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('renders the empty-state text at >= 4.5:1 on its elevated card', () => {
+    const ratio = contrastRatio(parseHex(token('--color-text-secondary')), parseHex(token('--color-bg-elevated')))
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('still fails the old --text-tertiary value, proving the check has teeth', () => {
+    // Guards the guard: if this assertion ever passes, the ratio maths has gone wrong and
+    // the AA tests above would be vacuously green.
+    const ratio = contrastRatio(parseHex('#737373'), parseHex(token('--color-bg-primary')))
+    expect(ratio).toBeLessThan(4.5)
+  })
+})
+
+describe('DESIGN.md lint', () => {
+  it('reports zero errors and zero warnings', () => {
+    // design.md lint exits 0 even with warnings, and CI does not run `lint:design` as its own
+    // step - so asserting it here is what actually keeps the frontmatter clean on every push
+    // (contrast regressions, orphaned tokens, broken {colors.x} refs, section order).
+    const bin = join(root, 'node_modules', '.bin', 'design.md')
+    let raw: string
+    try {
+      raw = execFileSync(bin, ['lint', 'DESIGN.md'], {
+        cwd: root,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'inherit'],
+      })
+    } catch (error) {
+      // A lint *error* exits non-zero, and execFileSync throws with the findings JSON captured
+      // on err.stdout. Without this, the test would die as "Command failed" and swallow the
+      // very diagnosis it exists to surface.
+      raw = (error as { stdout?: string }).stdout ?? ''
+      expect(raw, `design.md lint failed with no parsable output: ${String(error)}`).not.toBe('')
+    }
+    const { findings, summary } = JSON.parse(raw) as {
+      findings: Array<{ severity: string; message: string }>
+      summary: { errors: number; warnings: number }
+    }
+    const offenders = findings.filter((finding) => finding.severity !== 'info')
+
+    expect(offenders.map((finding) => finding.message)).toEqual([])
+    expect(summary.errors).toBe(0)
+    expect(summary.warnings).toBe(0)
   }, 30_000)
 })

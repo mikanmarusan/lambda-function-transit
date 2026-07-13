@@ -33,7 +33,7 @@
 
 .departure,
 .arrival {
-  font-size: 18px;
+  font-size: var(--font-size-xl);
   font-weight: 600;
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
@@ -45,7 +45,7 @@
 
 .arrow {
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: var(--font-size-md);
 }
 
 .meta {
@@ -61,7 +61,7 @@
   padding: var(--space-1) var(--space-2);
   background-color: var(--bg-tertiary);
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -97,6 +97,6 @@
 
   .departure,
   .arrival {
-    font-size: 20px;
+    font-size: var(--font-size-2xl);
   }
 }

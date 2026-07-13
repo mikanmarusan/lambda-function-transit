@@ -109,7 +109,9 @@ The frontmatter of [`frontend/DESIGN.md`](../frontend/DESIGN.md) is the source o
 `frontend/src/index.css` `@import`s the generated file and then declares the hand-authored residue in a single `:root` block:
 
 - **Alias layer** — maps generated names onto the names the existing `*.module.css` call sites use: `--bg-*`, `--border-*`, `--text-primary/secondary/tertiary`, `--accent-*` (from `--color-*`), `--font-size-*` (from `--text-<level>`, which would otherwise collide with the `--text-*` color family), and `--space-*` (from `--spacing-*`). `--radius-sm/md/lg` need no alias — the export already emits those exact names.
-- **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` / `--font-mono` and the transitions `--transition-fast` / `--transition-normal`.
+- **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` (Latin → CJK → generic, all OS-bundled faces; no webfont is loaded) / `--font-mono`, and the transition `--transition-fast`.
+
+Translucent colors *are* export-modelable: the exporter passes 8-digit hex (`#rrggbbaa`) through and normalizes `rgba()` into it, so the error-banner tints (`--accent-red-tint` / `--accent-red-tint-border`) live in the frontmatter like any other color. The `design.md` contrast lint is not alpha-aware, though, so those tints are modeled as `textColor`-less surface components and their real (composited) contrast is pinned in Vitest instead.
 
 `npm run lint:design` (`design.md lint DESIGN.md`) lints the source document.
 
@@ -400,9 +402,14 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - every `var(--token)` referenced anywhere under `frontend/src/**/*.css` resolves to a custom property declared at `:root` in either the generated file or `index.css`;
 - no CSS file declares a custom property outside a `:root` block;
 - the alias layer never redeclares a generated token name (a redeclaration would shadow the import and make `--x: var(--x)` a self-referential cycle);
-- every `:root` declaration in `index.css` delegates through `var(--…)` except the four residue tokens (`--font-sans`, `--font-mono`, `--transition-fast`, `--transition-normal`), and `index.css` still imports `./design-tokens.css`;
+- every `:root` declaration in `index.css` delegates through `var(--…)` except the three residue tokens (`--font-sans`, `--font-mono`, `--transition-fast`), and `index.css` still imports `./design-tokens.css`;
 - the generated file keeps its `DO NOT EDIT` header, holds a plain `:root {` block with no `@theme`, and pulls in no external `@import` / remote font URL;
-- the committed `design-tokens.css` is **byte-identical** to a fresh export (exact equality, catching hand-edits) and the export is idempotent.
+- the committed `design-tokens.css` is **byte-identical** to a fresh export (exact equality, catching hand-edits) and the export is idempotent;
+- **no orphaned role token**: every token declared in `index.css`, and every generated token outside a small documented allowlist, has at least one `var()` call site — so a token with no role cannot be introduced (or left behind) silently. Spacing rungs are exempt: the 4px grid is a deliberately complete vocabulary, so an unused rung is a vacancy, not an orphan;
+- **call-site hygiene**: `*.module.css` sizes text only from the `--font-size-*` scale (never a raw px), writes no raw `rgba()`/hex color, and no stylesheet loads a webfont (`@font-face` / CDN URL);
+- **`--font-sans` carries a CJK face**, ordered Latin → CJK → generic;
+- **WCAG AA contrast**: `--text-tertiary` clears 4.5:1 on `bg-primary`/`secondary`/`tertiary`, the error banner's text clears 4.5:1 against its *composited* translucent tint, and the empty-state text clears 4.5:1 on its elevated card. A negative control asserts the pre-ADR value (`#737373`) still fails, so the ratio maths cannot go vacuously green;
+- **`design.md lint` reports zero errors and zero warnings** — this runs the pinned local bin from the test suite, so the frontmatter's lint cleanliness is enforced by `npm test` (which CI runs) rather than only by hand.
 
 ### Observability
 

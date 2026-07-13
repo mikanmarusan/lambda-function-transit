@@ -7,7 +7,7 @@
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 
 .status {
@@ -23,22 +23,22 @@
 .timestamp {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
+/* Icon glyph sizes (10/12px) are off the type scale because they are not text: they are
+   Phosphor icon dimensions, passed as the `size` prop in StatusIndicator.tsx like every
+   other icon in the app. These classes carry colour and motion only. */
 .iconOk {
   color: var(--accent-green);
-  font-size: 10px;
 }
 
 .iconError {
   color: var(--accent-red);
-  font-size: 12px;
 }
 
 .iconLoading {
   color: var(--text-tertiary);
-  font-size: 10px;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
