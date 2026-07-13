@@ -108,6 +108,12 @@ vite.config.ts.timestamp-*
 # Playwright MCP output
 .playwright-mcp/
 
+# Playwright test output
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # AWS SAM build output
 .aws-sam/
 

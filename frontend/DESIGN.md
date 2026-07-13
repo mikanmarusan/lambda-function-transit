@@ -297,19 +297,23 @@ components:
 - ウェイトは `500` と `600` の2種のみ。
 - 等幅は時刻列（TransitCard の `.departure`/`.arrival`、`--font-mono`）と StatusIndicator の `.timestamp` に適用。
 - 字間 `letter-spacing: -0.02em` は **Latin/数字のみ**に適用（`.title`、`.departure`/`.arrival`）。CJK には掛けていない。
+- **CJK 本文の行間・禁則（実装済み。Typography の Gaps からクローズ）。** 日本語ラベル（駅名・路線名・タブ）は
+  `line-height: 1.6`（`body` の `1.5` を局所的に上書き）・`word-break: normal`・`line-break: strict` を持つ。適用先は
+  `App.module.css` の `.tab` / `.station`、`RouteDetail.module.css` の `.station` / `.stationIntermediate` / `.lineName`。
+  これらに `letter-spacing` は掛けない。**`word-break: break-word` は `.rawRoute`（生 `<pre>` フォールバック）専用**で、
+  駅名・路線名には波及させない（mid-glyph 折返しを防ぐ）。Playwright は computed 値（`line-break` / 行間比 /
+  `letter-spacing` / `word-break`）と、`break-word` が `.rawRoute` に閉じていることを固定する。
+  ただし `word-break: normal` と `letter-spacing: normal` は**CSS の初期値でもある**（宣言はグローバル上書きに対する
+  前向きのガードで、テストが落ちるのは `line-break` / 行間 / `.rawRoute` の分離が壊れたとき）。
 - 縦書きは使用しない。
 
 ### Gaps & Proposals（日本語タイポグラフィのフル規範）
 
-> 以下は**未実装の目標仕様**。CJK 書体スタック・フォールバック連鎖・型階梯の適用は**実装済みへ移動**した
-> （Current Spec 参照。Tech Debt #1 / #2 クローズ）。
+> 以下は**未実装の目標仕様**。CJK 書体スタック・フォールバック連鎖・型階梯の適用・**行間 1.6 / 禁則処理**は
+> **実装済みへ移動**した（Current Spec 参照。Tech Debt #1 / #2 クローズ、CJK 体裁は本 PR でクローズ）。
 
 - **Latin。** `Inter` を使うならローカル/同一オリジン woff2 をサブセット自前ホスト。未ホストのままなら宣言から外し、
   実フォールバック（system-ui 系）を先頭にする。**CDN からのロードは禁止**（現状は宣言のみで未ロード）。
-- **行間・字間。** CJK 本文は `line-height >= 1.6`（現状 1.5 はやや窮屈）。字間 `-0.02em` は Latin/数字のみに限定し、
-  **CJK には字間を掛けない**。`lineHeight` は export 非対応のため CSS 側で維持する。
-- **禁則処理。** CJK には `line-break: strict` と `word-break: normal` を適用し、駅名・路線名に `break-all`/`break-word`
-  を波及させない（`.rawRoute` の `word-break: break-word` は生フォールバック専用に留める）。
 - **OpenType。** `font-feature-settings: "palt" 1, "kern" 1` は**見出し／リード限定**（`fontFeature` は export で drop
   されるため CSS 手書き）。Latin 時刻列は等幅に加えて `font-variant-numeric: tabular-nums` を付与
   （本リポは `--font-mono` で近似達成済み）。
@@ -338,13 +342,26 @@ components:
   **`--space-7` / `--space-9` / `--space-11` は欠番**（飛び番）。
 - **transition**: `--transition-fast: 100ms ease` のみ（**export 表現不可 → 手書き残余**）。
   未使用だった `--transition-normal`（`150ms ease`）は削除した（Tech Debt #4）。
-- **配置**: `max-width: 600px` の単一カラムを `margin: 0 auto` で中央寄せ。`.content`・`.cards` の縦 gap は `--space-3`。
-  モバイルファースト。
+- **配置**: `max-width: 600px` の単一カラムを `margin: 0 auto` で中央寄せ。カード間の縦 gap は `.cards` の `--space-3`。
+  `.content` は gap を持たない（`.status` と `.cards` が排他のため。Components 参照）。モバイルファースト。
+- **ブレークポイントは `max-width: 480px` の 1 本のみ**（Tech Debt #5 クローズ）。規約:
+  - 値は **480px 固定**。第 2 のブレークポイントを足さない（他は流動レイアウトで解く）。
+  - **寸法ブレークポイント（`min-width`/`max-width`）を書いてよい唯一のファイルは `TransitCard.module.css`**
+    （カード内リフロー。Responsive Behavior 参照）。`prefers-reduced-motion` のような**寸法でない media feature** は
+    ブレークポイントではないため、この規約の対象外（`App.module.css` / `StatusIndicator.module.css` で使用中）。
+  - 検証: `grep -RnE '@media[^{]*(min-width|max-width)' src/**/*.module.css` が `TransitCard` の `480px` 1 件のみを返すこと。
+  - `@google/design.md` の frontmatter に breakpoint カテゴリは無いため、この規約は**本文が正**（トークン化しない）。
+- **タッチターゲットは 44×44 以上**（Tech Debt #6 クローズ）。視覚寸法とヒット領域は別物でよい: `.refreshButton` は
+  視覚 32×32 のまま透明な `::after`（44×44・`position: relative` の中央）でヒット領域だけを広げ、`.tab` は
+  `min-width` / `min-height: 44px` + `inline-flex` で**可視ボックスごと** 44×44 にする。
+  **フォーカスリングは可視ボックスに密着**する（`::after` は `outline` を持たないため、`:focus-visible` は
+  ボタン自身のボーダーボックスを描く）。
 
 ### Gaps & Proposals
 
 - 欠番（`--space-7/9/11`）は意図的か未定義かを明記し、使うなら frontmatter に足す。スケール外 px の直書きは禁止。
-- レスポンシブの詳細は末尾の Responsive Behavior を参照（ブレークポイントが `TransitCard` ローカルに閉じ不統一）。
+- ヒット領域の 44px は spacing スケール外の生 px（`--space-11` が欠番のため）。44 を再利用する箇所が増えるなら
+  frontmatter に `spacing.11: 44px` として足すか、専用の touch-target トークンを検討する（現状 2 箇所のみ）。
 
 ---
 
@@ -402,28 +419,46 @@ components:
 - `.headerContent` / `.container`: `max-width: 600px; margin: 0 auto`、padding `--space-4`。
 - `.titleGroup`: ロゴ `Train`（size 20, weight bold, 色 `--accent-blue`）+ `.title`（`Transit`、`--font-size-lg`/`600`、`letter-spacing: -0.02em`）。
 - `.tabs`: `display: flex; gap: --space-1; flex: 1; overflow-x: auto`（出発地タブを横スクロール）。
-- `.tab`: padding `--space-1 --space-3`、ボーダー `1px solid --border-primary`、`--radius-md`、色 `--text-secondary`、
-  `--font-size-base`/`500`、`white-space: nowrap`、`transition: all --transition-fast`。
+- `.tab`: `inline-flex`（`align-items: center; justify-content: center`）、**`flex: 0 0 auto`**、
+  **`min-width` / `min-height: 44px`**（タッチターゲット。Layout 参照）。
+  `flex: 0 0 auto` は必須: flex アイテムの既定 `min-width: auto`（＝内容幅の下限）が `.tabs` の `overflow-x: auto`
+  スクロールを成立させているところへ `min-width: 44px` を宣言すると、その下限を**より小さい値に置き換えて**しまい、
+  タブが 44px まで潰れて `nowrap` のラベルが隣へはみ出す。
+  padding `--space-1 --space-3`、ボーダー `1px solid --border-primary`、
+  `--radius-md`、色 `--text-secondary`、`--font-size-base`/`500`、`line-height: 1.6`・`word-break: normal`・
+  `line-break: strict`（CJK 体裁）、`white-space: nowrap`、`transition: all --transition-fast`。
+  選択状態は **`aria-pressed`**（`origin === activeOrigin`）で支援技術に出す。
 - `.tab:hover`: 地 `--bg-secondary`、色 `--text-primary`。`.tabActive`: 地 `--bg-secondary`、ボーダー `--border-secondary`、色 `--text-primary`。
-- `.route`: `activeOrigin` + `ArrowRight`（16, 色 `--text-tertiary`）+ `つつじヶ丘`。`.station` は `--font-size-md`/`500`/`--text-primary`。
-- `.refreshButton`: `32px × 32px`、地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-md`、`aria-label="Refresh"`。
+- `.route`: `activeOrigin` + `ArrowRight`（16, 色 `--text-tertiary`）+ `つつじヶ丘`。`.station` は `--font-size-md`/`500`/
+  `--text-primary`、`line-height: 1.6`・`word-break: normal`・`line-break: strict`。
+- `.refreshButton`: **視覚 `32px × 32px`**、地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-md`、
+  `aria-label="Refresh"`、`aria-busy={loading}`。`position: relative` + 透明な `::after`（`44px × 44px`・中央）で
+  **ヒット領域だけ 44×44** に広げる（視覚寸法とフォーカスリングは 32×32 のまま）。
   `:hover:not(:disabled)` で地 `--bg-tertiary`・ボーダー `--border-secondary`。
   `:active:not(:disabled)` で地/罫 `--accent-blue-hover`（押下。`components.refresh-button-active`）。
   `:disabled` は `opacity: 0.5; cursor: not-allowed`。
   ローディング中は `Spinner`（16）を回し、通常は `ArrowClockwise`（16）。
+- `.spinner`（`spin` 1s linear infinite）は **`@media (prefers-reduced-motion: reduce)` で `animation: none`**。
+- `.content`: 4 分岐（error / loading / empty / cards）の器。うち**状態3分岐（error / loading / empty）だけ**を
+  `.status`（**常設の `aria-live="polite"`**）で包む。分岐ノードは文言ごと条件マウントされるため、差し替えを
+  読み上げさせるには**それらより長生きするコンテナ**側に live region を置く必要がある。
+  **`.cards` は live region の外**に置く: 中に入れるとタブ切替のたびに時刻表全体が読み上げられてしまう
+  （ユーザー起点の遷移に告知は要らない）。空の `.status` は**高さ 0 のまま表示し続ける**（`display: none` は
+  live region をアクセシビリティツリーから削除してしまい、「内容と同時に現れるリージョン」＝条件マウントと
+  同じ振る舞いに戻ってしまう）。`.content` に `gap` を置かないのはこのため: `.status` と `.cards` は排他
+  （cards は `activeRoutes.length > 0`、`.status` の3分岐はいずれもその否定）なので、`gap` は幽霊行しか生まない。
 - `.loading`: 縦中央寄せ、`Spinner`（24）+ `Loading transit information...`、padding `--space-12`、色 `--text-secondary`、`--font-size-base`。
 - `.error`: `Failed to load transit information`、**`role="alert"`**、padding `--space-4`、地 `--accent-red-tint`、罫
   `1px solid --accent-red-tint-border`、`--radius-md`、色 `--accent-red`、`--font-size-base`（Colors 参照）。
-- `.empty`: `No departures found`、**`role="status"`**、padding `--space-12`、地 `--bg-elevated`、
-  罫 `1px solid --border-primary`、`--radius-lg`、色 `--text-secondary`、`--font-size-base`、中央寄せ
-  （`components.empty-state`）。描画条件は `!error && !loading && lastUpdated && activeRoutes.length === 0`。
+- `.empty`: **`Tray`（24, 色 `--text-tertiary` = `.emptyIcon`）** + `No departures found`、**`role="status"`**、
+  縦積み `gap --space-3`、padding `--space-12`、地 `--bg-elevated`、罫 `1px solid --border-primary`、`--radius-lg`、
+  色 `--text-secondary`、`--font-size-base`、中央寄せ（`components.empty-state`）。**赤もボタンも持たない**
+  （エラーではなく「結果ゼロ」の告知）。描画条件は `!error && !loading && lastUpdated && activeRoutes.length === 0`。
   **`lastUpdated` で門番する**のは、`loading` の初期値が `false` のため、これが無いと初回ペイントで空状態が
   一瞬ちらつくため。
 - `.error` / `.empty` の `role` は**必須**（バナー／カードを支援技術に「アラート」「ステータス」として提示する）。
-  `tests/App.test.tsx` が 4 分岐（error / loading / empty / cards）と role を固定している。
-  ただし両者は**文言ごと条件マウント**されるため、`role="status"`（polite）は読み上げ環境によっては挿入時に
-  読まれない。差し替えの読み上げまで保証したいなら、live region を常時マウントして中身だけ差し替える必要がある
-  （現状は未対応。この章の Gaps 参照）。
+  `tests/App.test.tsx` が 4 分岐（error / loading / empty / cards）と role・`aria-live`・`aria-busy`・`aria-pressed` を
+  固定している。
 - `.footer`: `Data from Jorudan`、padding `--space-4`、中央寄せ、`--font-size-xs`、色 `--text-tertiary`、上罫 `1px solid --border-primary`。
 
 #### TransitCard（`TransitCard.tsx` / `TransitCard.module.css`）
@@ -458,22 +493,21 @@ components:
   - `error` → `Warning`（`size={12}`, weight fill, 色 `--accent-red`）+ ラベル `Error`（`components.status-indicator-error`）。
   - `loading` → `Circle`（`size={10}`, 色 `--text-tertiary`, `pulse` アニメ）+ ラベル `Connecting`
     （`components.status-indicator-loading`。`--text-tertiary` は AA 達成済みで warning は出ない）。
+- `.iconLoading`（`pulse` 1.5s ease-in-out infinite）は **`@media (prefers-reduced-motion: reduce)` で
+  `animation: none` + `opacity: 1`**（キーフレーム始点の `0.3` に凍結させず、不透明で止める）。
 - `.timestamp`: `lastUpdated` があるとき `Updated HH:MM:SS`（`--font-mono`/`--font-size-xs`/`--text-tertiary`）。
 
 #### empty-state（**実装済み**）
 
-- `routes=[]` / `loading=false` / `error=null`（Verification Artifacts B の状態 #4）で `.empty` カードを描画する。
-  地は `--bg-elevated`（Tech Debt #4 でこの段に役割が付いた）、文字 `--text-secondary`、padding `--space-12`、
-  文言 `No departures found`。詳細は上の App の `.empty` を参照。
+- `routes=[]` / `loading=false` / `lastUpdated` あり / `error=null`（Verification Artifacts B の状態 #4）で `.empty`
+  カードを描画する。地は `--bg-elevated`（Tech Debt #4 でこの段に役割が付いた）、文字 `--text-secondary`、
+  padding `--space-12`、`Tray`（24）+ 文言 `No departures found`。詳細は上の App の `.empty` を参照。
 
 ### Gaps & Proposals
 
 - アニメ時間（`spin` 1s / `pulse` 1.5s）が呼び出し側で非トークン。`--transition-*` は UI トランジション用で
   キーフレーム尺とは別物のため、必要になったら別カテゴリとして足す（現状は 2 箇所のみで、前倒しはしない）。
-- `prefers-reduced-motion` のガードが無い（Tech Debt #7）。
-- **live region が常時マウントされていない。** `.error` / `.empty` は文言ごと条件マウントされるため、
-  `role="status"` の読み上げが環境依存になる。`.content` 内に空の live region を常設し中身だけ差し替える形にすると
-  確実になる（Tech Debt #9）。
+- 空状態は**アクションを持たない**（再取得は共通の refresh ボタン）。カード内ボタンを足さない。
 
 ---
 
@@ -513,17 +547,20 @@ components:
 
 ### Current Spec
 
-- **ブレークポイントは単一**: `@media (max-width: 480px)`（`TransitCard.module.css` のみ）。
+- **ブレークポイントは単一**: `@media (max-width: 480px)`（`TransitCard.module.css` のみ。規約は §Layout）。
   - `.header` が `flex-wrap: wrap` + `gap: --space-3` になり、`.times` が `flex-basis: 100%; order: 1`（時刻を上段へ）、
     `.meta` が `order: 2`、`.expandIcon` が `order: 3`。
   - `.departure`/`.arrival` が `--font-size-xl` → `--font-size-2xl`（`18px` → `20px`）に拡大。
 - 他のコンポーネントは**流動レイアウト**（固定ブレークポイント無し）。タブは `overflow-x: auto` で横スクロール。
+- **タッチターゲットは 44×44 以上**（Tech Debt #6 クローズ）: refresh は視覚 32×32 + `::after` 44×44 のヒット領域、
+  タブは `min-width`/`min-height: 44px`。Playwright が `elementFromPoint` でヒット領域を実測して固定している
+  （`boundingBox()` は擬似要素を見ないため、可視ボックスではなく**当たり判定**を測る）。
+- **`prefers-reduced-motion: reduce`** で `spin` / `pulse` を停止（Tech Debt #7a クローズ）。これは寸法の
+  ブレークポイントではないため、単一ブレークポイント規約の対象外。
 
 ### Gaps & Proposals
 
-- **タッチターゲット 44×44 の指針に未達**: refresh ボタンは `32px × 32px`、タブは高さ約 24px。モバイル操作性のため
-  44×44 への拡大を検討。
-- ブレークポイントが `TransitCard` ローカルに閉じており不統一。共通ブレークポイントの定義を検討。
+- ブレークポイントは 480px の 1 本で足りている。2 本目が必要になったら、まず流動レイアウトで解けないかを検討する。
 
 ---
 
@@ -558,7 +595,7 @@ components:
 
 ## Tech Debt
 
-トークン層の負債（#1〜#4・#8）は**クローズ済み**。番号は履歴の追跡性のため据え置く。
+**全件クローズ済み**（トークン層 #1〜#4・#8、UI 層 #5〜#7・#9）。番号は履歴の追跡性のため据え置く。
 
 1. ~~`--font-sans` に CJK 面が無い~~ → **クローズ**。OS 同梱の日本語書体を Latin の後・総称の前に挿入した
    （`Inter` 自体は宣言のみで未ロードのまま。自前ホストの是非は Typography の Gaps に残す）。
@@ -567,12 +604,21 @@ components:
 3. ~~`.error` の生 `rgba()`~~ → **クローズ**。`--accent-red-tint` / `--accent-red-tint-border`（8桁 hex）に置換。
 4. ~~宣言済み・未使用の5トークン~~ → **クローズ**。`--border-accent` / `--transition-normal` / `--accent-yellow` を削除、
    `--accent-blue-hover`（refresh 押下）と `--bg-elevated`（空状態カード）に役割を付与。予約スロットも全廃（Colors 参照）。
-5. レスポンシブのブレークポイントが `TransitCard` ローカルに閉じ不統一。
-6. タッチターゲットが 44×44 指針に未達（refresh 32×32・タブ約 24px 高）。
-7. `prefers-reduced-motion` 未ガード（`spin` / `pulse` アニメ）。※空状態の UI 未実装は #4 の一環で解消済み。
-9. live region（`.error` / `.empty`）が文言ごと条件マウントされるため、`role="status"` の読み上げが環境依存。
+5. ~~レスポンシブのブレークポイントが `TransitCard` ローカルに閉じ不統一~~ → **クローズ**。`max-width: 480px` を
+   単一ブレークポイントとして §Layout に規約化し、`@media` を書いてよい唯一のファイルを `TransitCard.module.css` に
+   固定した（新規ブレークポイントは足さない。`prefers-reduced-motion` は寸法 media feature ではないため対象外）。
+6. ~~タッチターゲットが 44×44 指針に未達~~ → **クローズ**。refresh は視覚 32×32 のまま `::after` で 44×44 のヒット
+   領域を持ち（フォーカスリングは可視ボックスに密着）、タブは `min-width`/`min-height: 44px` + `inline-flex`。
+7. ~~`prefers-reduced-motion` 未ガード（`spin` / `pulse` アニメ）~~ → **クローズ**。両アニメに
+   `@media (prefers-reduced-motion: reduce) { animation: none }`（pulse は `opacity: 1` 固定）。
+   ※空状態の UI 未実装（#7b）は #4 の一環で解消済み。本 PR で `Tray`(24) と aria 属性を足して仕上げた。
 8. ~~`--text-tertiary` が WCAG AA 未達~~ → **クローズ**。`#737373` → `#8a8a8a`（bg-primary 5.73:1 / bg-secondary 5.47:1 /
    bg-tertiary 5.19:1）。ADR 0003 D-E を実施。
+9. ~~live region が文言ごと条件マウントされる~~ → **クローズ**。状態3分岐（error / loading / empty）を包む `.status` に
+   `aria-live="polite"` を常設し、分岐ノードより長生きするリージョンで差し替えを告知する（`.error` の
+   `role="alert"` / `.empty` の `role="status"` は据え置き）。空のときも**高さ 0 で表示し続ける**（`display: none`
+   ではツリーから消えて常設の意味が無くなる。Playwright が computed `display` を固定）。`.cards` は**意図的に
+   リージョン外**に置き、タブ切替で時刻表全体が読み上げられるのを避ける。
 
 ---
 
@@ -584,8 +630,10 @@ components:
 
 Colors / Layout / Shapes の各表が frontmatter のミラー（生成／手書きの境界は Overview の表を参照）。
 Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bold) / `ArrowRight`(16) / `ArrowClockwise`(16) /
-`Spinner`(16・24) / `Clock`(12,bold) / `ArrowsDownUp`(12,bold) / `CaretUp`・`CaretDown`(16) / `Circle`(status, 10) /
-`Warning`(status, 12)。アニメ: `spin` 1s linear infinite / `pulse` 1.5s ease-in-out infinite。
+`Spinner`(16・24) / `Tray`(24, 空状態) / `Clock`(12,bold) / `ArrowsDownUp`(12,bold) / `CaretUp`・`CaretDown`(16) /
+`Circle`(status, 10) / `Warning`(status, 12)。アニメ: `spin` 1s linear infinite / `pulse` 1.5s ease-in-out infinite
+（どちらも `prefers-reduced-motion: reduce` で停止）。タッチターゲット: 44×44（refresh は `::after`、タブは
+`min-width`/`min-height`）。ブレークポイント: `max-width: 480px` の 1 本のみ。
 
 ### B. 主要 UI 状態（Key UI States）— 実在する14状態
 
@@ -596,7 +644,7 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 | 1 | 初回ローディング（`Spinner` 24 + `Loading transit information...`） | `App.tsx` `!error && activeRoutes.length === 0 && loading` |
 | 2 | エラーバナー（固定 `Failed to load transit information`、`role="alert"`。hook の error 文字列は非表示） | `App.tsx` `error &&` / `.error` |
 | 3 | リフレッシュ中（refresh ボタン内 `Spinner` 16・既存カードは残る） | `App.tsx` `refreshButton disabled={loading}` |
-| 4 | 空状態（`routes=[]`・`loading=false`・`lastUpdated` あり・`error=null` → `.empty` カード `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
+| 4 | 空状態（`routes=[]`・`loading=false`・`lastUpdated` あり・`error=null` → `.empty` カード `Tray`(24) + `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
 | 5 | 先頭カード既定展開（`index === 0`） | `TransitCard.tsx` `useState(index === 0)` |
 | 6 | カード展開／折りたたみ | `TransitCard.tsx` `expanded` トグル |
 | 7 | タブ active | `App.module.css` `.tabActive` |
@@ -608,8 +656,9 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 | 13 | RouteDetail 生 `<pre>` フォールバック | `parseRoute()` が 0 件のとき `.rawRoute` |
 | 14 | 不正サマリ（`--:--` / `--` 表示） | `parseSummary()` の既定値 |
 
-横断挙動（独立した状態ではない）: 長い日本語名の折返し / タブ多数時の横スクロール（`overflow-x: auto`）/
-`@media (max-width: 480px)` リフロー / refresh ボタンの押下（`:active`）。
+横断挙動（独立した状態ではない）: 長い日本語名の折返し（`line-break: strict` / `word-break: normal`）/
+タブ多数時の横スクロール（`overflow-x: auto`）/ `@media (max-width: 480px)` リフロー / refresh ボタンの押下
+（`:active`）/ `prefers-reduced-motion: reduce` でのアニメ停止。
 
 **既知ギャップ**: 無し（状態 #4 の空状態は実装済み）。
 

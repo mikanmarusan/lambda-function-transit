@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, ArrowClockwise, Train, Spinner } from '@phosphor-icons/react'
+import { ArrowRight, ArrowClockwise, Train, Spinner, Tray } from '@phosphor-icons/react'
 import { useTransit, useApiStatus } from './hooks/useTransit'
 import { TransitCard } from './components/TransitCard'
 import { StatusIndicator } from './components/StatusIndicator'
@@ -35,6 +35,7 @@ function App() {
                   key={origin}
                   className={`${styles.tab} ${origin === activeOrigin ? styles.tabActive : ''}`}
                   onClick={() => setSelectedOrigin(origin)}
+                  aria-pressed={origin === activeOrigin}
                 >
                   {origin}
                 </button>
@@ -44,6 +45,7 @@ function App() {
               className={styles.refreshButton}
               onClick={refresh}
               disabled={loading}
+              aria-busy={loading}
               aria-label="Refresh"
             >
               {loading ? (
@@ -63,26 +65,33 @@ function App() {
           )}
 
           <div className={styles.content}>
-            {error && (
-              <div className={styles.error} role="alert">
-                <span>Failed to load transit information</span>
-              </div>
-            )}
+            {/* The status branches (error / loading / empty) are condition-mounted, so the live
+                region has to be a container that outlives them - a role on the branch node itself
+                is only announced by some AT. The cards deliberately live OUTSIDE this region:
+                inside it, every tab switch would re-read the whole timetable. */}
+            <div className={styles.status} aria-live="polite">
+              {error && (
+                <div className={styles.error} role="alert">
+                  <span>Failed to load transit information</span>
+                </div>
+              )}
 
-            {!error && activeRoutes.length === 0 && loading && (
-              <div className={styles.loading}>
-                <Spinner size={24} className={styles.spinner} />
-                <span>Loading transit information...</span>
-              </div>
-            )}
+              {!error && activeRoutes.length === 0 && loading && (
+                <div className={styles.loading}>
+                  <Spinner size={24} className={styles.spinner} />
+                  <span>Loading transit information...</span>
+                </div>
+              )}
 
-            {/* Empty state. Gated on lastUpdated: it is set only by a completed fetch, so
-                the card cannot flash on the first paint (loading starts false). */}
-            {!error && !loading && lastUpdated && activeRoutes.length === 0 && (
-              <div className={styles.empty} role="status">
-                <span>No departures found</span>
-              </div>
-            )}
+              {/* Empty state. Gated on lastUpdated: it is set only by a completed fetch, so
+                  the card cannot flash on the first paint (loading starts false). */}
+              {!error && !loading && lastUpdated && activeRoutes.length === 0 && (
+                <div className={styles.empty} role="status">
+                  <Tray size={24} className={styles.emptyIcon} />
+                  <span>No departures found</span>
+                </div>
+              )}
+            </div>
 
             {!error && activeRoutes.length > 0 && (
               <div className={styles.cards}>

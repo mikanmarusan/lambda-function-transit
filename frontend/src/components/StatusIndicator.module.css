@@ -50,3 +50,12 @@
     opacity: 1;
   }
 }
+
+/* Tech Debt #7a: with the animation off, the dot is pinned fully opaque rather than left at the
+   keyframe's 0.3 - the `Connecting` label carries the state, the dot must stay legible. */
+@media (prefers-reduced-motion: reduce) {
+  .iconLoading {
+    animation: none;
+    opacity: 1;
+  }
+}

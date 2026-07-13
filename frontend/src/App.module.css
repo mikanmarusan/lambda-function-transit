@@ -48,6 +48,9 @@
   margin: 0 auto;
 }
 
+/* The `gap` is load-bearing, not just spacing: .refreshButton's 44x44 ::after hit area overhangs
+   its 32x32 visual box by 6px, so the gap to .tabs must stay >= --space-2 or the overhang would
+   start swallowing clicks aimed at the last tab. */
 .routeHeader {
   display: flex;
   align-items: center;
@@ -63,7 +66,21 @@
   overflow-x: auto;
 }
 
+/* The visible box is the touch target: min 44x44 (Tech Debt #6), so no ::after hit area is
+   needed here and :focus-visible keeps hugging the control. CJK: no letter-spacing, kinsoku
+   on, and the station name never breaks mid-word (Typography).
+
+   `flex: 0 0 auto` is load-bearing: a flex item's default `min-width: auto` floors it at its
+   content width, which is what lets `.tabs { overflow-x: auto }` scroll instead of squeezing.
+   Declaring `min-width: 44px` REPLACES that floor with a smaller one, so without this the tabs
+   would shrink to 44px and their `nowrap` labels would spill over their neighbours. */
 .tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   padding: var(--space-1) var(--space-3);
   background-color: transparent;
   border: 1px solid var(--border-primary);
@@ -71,6 +88,9 @@
   color: var(--text-secondary);
   font-size: var(--font-size-base);
   font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -98,6 +118,9 @@
   font-size: var(--font-size-md);
   font-weight: 500;
   color: var(--text-primary);
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
 .routeArrow {
@@ -105,6 +128,7 @@
 }
 
 .refreshButton {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,6 +140,19 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+/* Tech Debt #6: 44x44 touch target without growing the 32x32 visual box. The hit area is a
+   transparent, centred ::after - it enlarges what the finger can hit but not what the eye (or
+   the :focus-visible outline, which traces the button's own border box) sees. */
+.refreshButton::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .refreshButton:hover:not(:disabled) {
@@ -137,10 +174,15 @@
   opacity: 0.5;
 }
 
+/* No `gap` here, deliberately. `.status` and `.cards` are mutually exclusive - the cards need
+   activeRoutes.length > 0 and every .status branch needs the opposite - so a gap could only ever
+   reserve a phantom row above the cards, for the empty (0-height) live region.
+   The empty `.status` must keep its box: `display: none` would prune the live region from the
+   accessibility tree, and a region that only enters the tree with its content already in place is
+   no better than a conditionally mounted one (Tech Debt #9). */
 .content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 .cards {
@@ -165,6 +207,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-3);
   padding: var(--space-12);
   background-color: var(--bg-elevated);
   border: 1px solid var(--border-primary);
@@ -172,6 +215,11 @@
   color: var(--text-secondary);
   font-size: var(--font-size-base);
   text-align: center;
+}
+
+/* Empty is a neutral, non-alarming state: tertiary glyph, never the error red. */
+.emptyIcon {
+  color: var(--text-tertiary);
 }
 
 .error {
@@ -196,6 +244,14 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Tech Debt #7a: honour the OS motion preference. The spinner is decorative - the adjacent
+   label ("Loading transit information...") and aria-busy still carry the state. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
   }
 }
 
