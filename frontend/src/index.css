@@ -26,7 +26,6 @@
 
   --border-primary: var(--color-border-primary);
   --border-secondary: var(--color-border-secondary);
-  --border-accent: var(--color-border-accent);
 
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
@@ -36,7 +35,9 @@
   --accent-blue-hover: var(--color-accent-blue-hover);
   --accent-green: var(--color-accent-green);
   --accent-red: var(--color-accent-red);
-  --accent-yellow: var(--color-accent-yellow);
+  /* Translucent washes for the error banner: alpha hex over the page ground (--bg-primary). */
+  --accent-red-tint: var(--color-accent-red-tint);
+  --accent-red-tint-border: var(--color-accent-red-tint-border);
 
   /* 2a. Aliases - Font size scale (call sites use --font-size-*, never --text-* sizes) */
   --font-size-xs: var(--text-xs);
@@ -58,13 +59,16 @@
   --space-10: var(--spacing-10);
   --space-12: var(--spacing-12);
 
-  /* 2b. Residue - Typography (multi-family fallback chains are not exportable) */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* 2b. Residue - Typography (multi-family fallback chains are not exportable).
+     Order is Latin -> CJK -> generic: 'Inter' (not loaded; no @font-face, no CDN) falls
+     through to the platform Latin UI face, then to the OS-bundled Japanese face, so
+     kana/kanji never land on a generic fallback. All faces are OS-bundled - adding a CDN
+     webfont is prohibited (Agent Prompt Guide). */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', YuGothic, Meiryo, system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
 
   /* 2b. Residue - Transitions (no such category in the export schema) */
   --transition-fast: 100ms ease;
-  --transition-normal: 150ms ease;
 }
 
 /* ==========================================================================

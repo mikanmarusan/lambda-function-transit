@@ -19,11 +19,11 @@ export function StatusIndicator({ status, lastUpdated }: StatusIndicatorProps) {
     <div className={styles.container}>
       <div className={styles.status}>
         {status === 'ok' ? (
-          <Circle weight="fill" className={styles.iconOk} />
+          <Circle size={10} weight="fill" className={styles.iconOk} />
         ) : status === 'error' ? (
-          <Warning weight="fill" className={styles.iconError} />
+          <Warning size={12} weight="fill" className={styles.iconError} />
         ) : (
-          <Circle className={styles.iconLoading} />
+          <Circle size={10} className={styles.iconLoading} />
         )}
         <span className={styles.label}>
           {status === 'ok' ? 'Connected' : status === 'error' ? 'Error' : 'Connecting'}

@@ -33,7 +33,7 @@
 }
 
 .title {
-  font-size: 16px;
+  font-size: var(--font-size-lg);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -69,7 +69,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -95,7 +95,7 @@
 }
 
 .station {
-  font-size: 14px;
+  font-size: var(--font-size-md);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -124,6 +124,14 @@
   color: var(--text-primary);
 }
 
+/* Pressed state. Hover stays border-only per the Do's, so the blue interaction accent
+   lands here (frontmatter components.refresh-button-active). */
+.refreshButton:active:not(:disabled) {
+  background-color: var(--accent-blue-hover);
+  border-color: var(--accent-blue-hover);
+  color: var(--text-primary);
+}
+
 .refreshButton:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -149,7 +157,21 @@
   gap: var(--space-3);
   padding: var(--space-12);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-base);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  text-align: center;
 }
 
 .error {
@@ -157,11 +179,11 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-4);
-  background-color: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background-color: var(--accent-red-tint);
+  border: 1px solid var(--accent-red-tint-border);
   border-radius: var(--radius-md);
   color: var(--accent-red);
-  font-size: 13px;
+  font-size: var(--font-size-base);
 }
 
 .spinner {
@@ -180,7 +202,7 @@
 .footer {
   padding: var(--space-4);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   border-top: 1px solid var(--border-primary);
 }

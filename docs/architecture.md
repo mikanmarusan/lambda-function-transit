@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: c45b026 -->
+<!-- spec-synced-through: 4f48966 -->
 
 ## 1. Overview
 
@@ -38,6 +38,7 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Generated token stylesheet | The `:root` custom properties exported from the DESIGN.md frontmatter. **Generated — never hand-edited** | `frontend/src/design-tokens.css` |
 | Global stylesheet | Imports the generated tokens, then declares the hand-authored residue (aliases + non-modelable tokens) and the reset/base/focus/scrollbar rules | `frontend/src/index.css` |
 | Token pipeline test | Vitest suite guarding token integrity and generated-file drift (see §7) | `frontend/tests/design-tokens.test.ts` |
+| App render-branch test | Vitest + Testing Library suite pinning the four content branches and their ARIA roles (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
 
 ## 4. Data Model
 
@@ -97,6 +98,21 @@ The transit results page is server-rendered HTML. The handler:
 
 Dynamic substrings used inside regular expressions are escaped via `escapeRegExp()` to prevent ReDoS.
 
+### Frontend Render Branches
+
+`frontend/src/App.tsx` renders the fetched routes through four content branches, each keyed off the `useTransit()` state (`originRoutes`, `loading`, `error`, `lastUpdated`):
+
+| Branch | Condition | Rendered |
+| --- | --- | --- |
+| Error | `error` | Error banner `Failed to load transit information`, `role="alert"` |
+| Loading | `!error && activeRoutes.length === 0 && loading` | `Spinner` + `Loading transit information...` |
+| Empty | `!error && !loading && lastUpdated && activeRoutes.length === 0` | Empty-state card `No departures found`, `role="status"` |
+| Cards | `!error && activeRoutes.length > 0` | `TransitCard` per route |
+
+The empty state is gated on `lastUpdated` (set only by a completed fetch), not merely on `!loading`: `useTransit` starts with `loading === false`, so without the guard the first paint — before the fetch effect runs — would satisfy `!loading && routes.length === 0` and flash the empty card on every visit. `frontend/tests/App.test.tsx` pins all four branches, that pre-fetch instant, and the two ARIA roles.
+
+Phosphor icon dimensions are passed as the component's `size` prop, never as CSS `font-size` — including `StatusIndicator`'s `Circle` (`size={10}`) and `Warning` (`size={12}`), whose `.icon*` classes carry colour and motion only. Icon glyph sizes therefore sit outside the type scale by construction (they are not text), which is what lets §7's call-site-hygiene check forbid raw `px` font sizes outright.
+
 ### Design Token Generation (build time)
 
 The frontmatter of [`frontend/DESIGN.md`](../frontend/DESIGN.md) is the source of truth for every export-modelable design token. `npm run export:design` (in `frontend/`) runs `node scripts/export-design.mjs`, which:
@@ -109,7 +125,9 @@ The frontmatter of [`frontend/DESIGN.md`](../frontend/DESIGN.md) is the source o
 `frontend/src/index.css` `@import`s the generated file and then declares the hand-authored residue in a single `:root` block:
 
 - **Alias layer** — maps generated names onto the names the existing `*.module.css` call sites use: `--bg-*`, `--border-*`, `--text-primary/secondary/tertiary`, `--accent-*` (from `--color-*`), `--font-size-*` (from `--text-<level>`, which would otherwise collide with the `--text-*` color family), and `--space-*` (from `--spacing-*`). `--radius-sm/md/lg` need no alias — the export already emits those exact names.
-- **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` / `--font-mono` and the transitions `--transition-fast` / `--transition-normal`.
+- **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` (Latin → CJK → generic, all OS-bundled faces; no webfont is loaded) / `--font-mono`, and the transition `--transition-fast`.
+
+Translucent colors *are* export-modelable: the exporter passes 8-digit hex (`#rrggbbaa`) through and normalizes `rgba()` into it, so the error-banner tints (`--accent-red-tint` / `--accent-red-tint-border`) live in the frontmatter like any other color. The `design.md` contrast lint is not alpha-aware, though, so those tints are modeled as `textColor`-less surface components and their real (composited) contrast is pinned in Vitest instead.
 
 `npm run lint:design` (`design.md lint DESIGN.md`) lints the source document.
 
@@ -400,9 +418,14 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - every `var(--token)` referenced anywhere under `frontend/src/**/*.css` resolves to a custom property declared at `:root` in either the generated file or `index.css`;
 - no CSS file declares a custom property outside a `:root` block;
 - the alias layer never redeclares a generated token name (a redeclaration would shadow the import and make `--x: var(--x)` a self-referential cycle);
-- every `:root` declaration in `index.css` delegates through `var(--…)` except the four residue tokens (`--font-sans`, `--font-mono`, `--transition-fast`, `--transition-normal`), and `index.css` still imports `./design-tokens.css`;
+- every `:root` declaration in `index.css` delegates through `var(--…)` except the three residue tokens (`--font-sans`, `--font-mono`, `--transition-fast`), and `index.css` still imports `./design-tokens.css`;
 - the generated file keeps its `DO NOT EDIT` header, holds a plain `:root {` block with no `@theme`, and pulls in no external `@import` / remote font URL;
-- the committed `design-tokens.css` is **byte-identical** to a fresh export (exact equality, catching hand-edits) and the export is idempotent.
+- the committed `design-tokens.css` is **byte-identical** to a fresh export (exact equality, catching hand-edits) and the export is idempotent;
+- **no orphaned role token**: every token declared in `index.css`, and every generated token outside a small documented allowlist, has at least one `var()` call site — so a token with no role cannot be introduced (or left behind) silently. Spacing rungs are exempt: the 4px grid is a deliberately complete vocabulary, so an unused rung is a vacancy, not an orphan;
+- **call-site hygiene**: `*.module.css` sizes text only from the `--font-size-*` scale (never a raw px), writes no raw `rgba()`/hex color, and no stylesheet loads a webfont (`@font-face` / CDN URL);
+- **`--font-sans` carries a CJK face**, ordered Latin → CJK → generic;
+- **WCAG AA contrast**: `--text-tertiary` clears 4.5:1 on `bg-primary`/`secondary`/`tertiary`, the error banner's text clears 4.5:1 against its *composited* translucent tint, and the empty-state text clears 4.5:1 on its elevated card. A negative control asserts the pre-ADR value (`#737373`) still fails, so the ratio maths cannot go vacuously green;
+- **`design.md lint` reports zero errors and zero warnings** — this runs the pinned local bin from the test suite, so the frontmatter's lint cleanliness is enforced by `npm test` (which CI runs) rather than only by hand.
 
 ### Observability
 

@@ -73,26 +73,26 @@
 
 .station {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-base);
   font-weight: 500;
 }
 
 .stationIntermediate {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
 }
 
 .lineName {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   padding-left: var(--space-2);
   border-left: 2px solid var(--border-secondary);
 }
 
 .rawRoute {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
