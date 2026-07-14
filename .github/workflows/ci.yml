@@ -33,6 +33,60 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      # Design-token pipeline gates (ADR 0003, D-D). They live in this
+      # credential-free job and must never run in the OIDC deploy workflow.
+      - run: npm run lint:design
+      - name: Design token drift gate
+        # Re-exports the tokens from DESIGN.md and fails if the committed artifact
+        # differs, i.e. DESIGN.md was edited without re-running export:design.
+        # The path carries no `frontend/` prefix: this job already runs with
+        # working-directory: frontend, so a prefixed path would resolve to
+        # frontend/frontend/... and silently match nothing.
+        run: |
+          # git diff is blind to untracked files, so an untracked artifact would
+          # make the gate pass vacuously (export just recreates it). Assert it is
+          # tracked before comparing.
+          git ls-files --error-unmatch src/design-tokens.css
+          npm run export:design
+          git diff --exit-code -- src/design-tokens.css
+      - name: Web font guard
+        # The design system uses OS-bundled font stacks only (ADR 0003) - no remote
+        # font is ever fetched (privacy / offline / CSP). Scans the generated tokens
+        # AND every hand-authored stylesheet + the entry HTML, which is where a
+        # Google Fonts <link> or url() would realistically land.
+        run: |
+          generated=src/design-tokens.css
+          # Derive the scan list from git rather than repeating a literal path list:
+          # a stylesheet added later is scanned automatically instead of silently
+          # skipped, and gitignored build output (dist/) is excluded for free.
+          handwritten=()
+          while IFS= read -r f; do handwritten+=("$f"); done \
+            < <(git ls-files 'src/*.css' index.html | grep -vxF "$generated")
+          [ ${#handwritten[@]} -gt 0 ] || { echo "::error::web font guard: scan list is empty - refusing to pass vacuously"; exit 1; }
+          # grep exits 2 on a missing file and `if` cannot tell that from "no match"
+          # (it would even mask a real hit in a sibling file), so assert existence first.
+          for f in "$generated" "${handwritten[@]}"; do
+            [ -f "$f" ] || { echo "::error::web font guard: $f is missing - the guard would pass vacuously"; exit 1; }
+          done
+          # Any remote reference: url(...//...), a bare @import of a remote sheet,
+          # or a <link href="//..."> - plus the Google font hosts by name.
+          remote_ref="url\([[:space:]]*['\"]?(https?:)?//|@import[[:space:]]+['\"](https?:)?//|href=['\"](https?:)?//|fonts\.googleapis|fonts\.gstatic"
+          # rc is inspected explicitly: an `if grep` swallows grep's exit 2, so a
+          # future typo in the pattern would turn the gate green while checking nothing.
+          # index.css legitimately @imports ./design-tokens.css, so the blanket
+          # @import ban applies to the generated file only.
+          rc=0; grep -nE "@import|$remote_ref" "$generated" || rc=$?
+          case $rc in
+            0) echo "::error file=frontend/$generated::generated tokens must not contain an @import or a remote font URL"; exit 1 ;;
+            1) ;;
+            *) echo "::error::web font guard: grep failed on $generated (rc=$rc)"; exit 1 ;;
+          esac
+          rc=0; grep -nE "$remote_ref" "${handwritten[@]}" || rc=$?
+          case $rc in
+            0) echo "::error::no remote font reference allowed - the font stacks are OS-bundled"; exit 1 ;;
+            1) ;;
+            *) echo "::error::web font guard: grep failed on the hand-authored files (rc=$rc)"; exit 1 ;;
+          esac
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

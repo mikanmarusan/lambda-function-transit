@@ -1,0 +1,29 @@
+# Code owners for the design-token pipeline (ADR 0003) and CI/dependency governance.
+#
+# IMPORTANT: this file on its own does NOT require anyone's review. GitHub only
+# requests review from the owners listed here; enforcement needs "Require review
+# from Code Owners" enabled on a branch-protection rule / ruleset for `main` in
+# the repository settings. Until that setting is turned on, this file is advisory.
+#
+# Caveat before enabling it: @mikanmarusan is currently the sole owner, and GitHub
+# does not let an author approve their own PR - so with enforcement on, every PR he
+# authors that touches a path below needs a second reviewer added as an owner.
+
+# Design-token source of truth, its generator, and the generated artifact.
+# The generator is owned too: editing it changes the artifact's content while both
+# CI gates keep passing.
+/frontend/DESIGN.md                  @mikanmarusan
+/frontend/scripts/export-design.mjs  @mikanmarusan
+/frontend/src/design-tokens.css      @mikanmarusan
+/frontend/src/index.css              @mikanmarusan
+/frontend/index.html                 @mikanmarusan
+
+# CI definitions and the governance files themselves (a PR must not be able to
+# silently remove the gates, the eol pin the drift gate relies on, or ownership).
+/.github/workflows/                  @mikanmarusan
+/.github/CODEOWNERS                  @mikanmarusan
+/.gitattributes                      @mikanmarusan
+
+# Dependency surface of the frontend toolchain (pinned alpha token generator).
+/frontend/package.json               @mikanmarusan
+/frontend/package-lock.json          @mikanmarusan

@@ -1,0 +1,4 @@
+# Keep generated CSS byte-identical across platforms so the design-token drift
+# gate (npm run export:design && git diff --exit-code -- src/design-tokens.css)
+# compares content, not line endings.
+*.css text eol=lf

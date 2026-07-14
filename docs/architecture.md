@@ -136,6 +136,24 @@ Translucent colors *are* export-modelable: the exporter passes 8-digit hex (`#rr
 
 `npm run lint:design` (`design.md lint DESIGN.md`) lints the source document.
 
+#### CI enforcement of the boundary
+
+The `test-frontend` job of [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — the credential-free job; these gates deliberately never run in the OIDC `deploy-production.yml` job — enforces the DESIGN.md → `design-tokens.css` → `index.css` direction on every pull request:
+
+| Gate | Step | Fails when |
+|------|------|-----------|
+| Design lint | `npm run lint:design` | the frontmatter has a `broken-ref` (the only finding class `design.md lint` exits non-zero on; section-order and WCAG contrast are warnings, exit 0 — blocking on those is the open follow-up in ADR 0003 D-D) |
+| Export drift | `git ls-files --error-unmatch src/design-tokens.css`, then `npm run export:design` and `git diff --exit-code -- src/design-tokens.css` | the committed `design-tokens.css` is not what a fresh export of DESIGN.md produces — i.e. DESIGN.md was edited without re-exporting, or the generated file was hand-edited. The `ls-files` assertion comes first because `git diff` is blind to untracked files, so an untracked artifact would otherwise pass the gate vacuously |
+| Web font | `grep -nE` for the remote-reference forms — `url(…//…)`, a bare `@import "…//…"`, `href="…//…"`, and the `fonts.googleapis` / `fonts.gstatic` hosts | one of those forms appears in the generated tokens or in any hand-authored stylesheet. The scan list is derived from `git ls-files 'src/*.css' index.html` rather than hard-coded, so a stylesheet added later (a new CSS Module, say) is covered automatically. The blanket `@import` ban applies to the generated file only: `index.css` legitimately `@import`s `./design-tokens.css` |
+
+Both guards are written to **fail closed**. The web-font step asserts every scanned file exists and inspects `grep`'s exit code explicitly (`0` = violation, `1` = clean, anything else = error) instead of using `if grep …`, because `grep` exits `2` on a missing file or a malformed pattern and `if` cannot distinguish that from "no match" — either would otherwise turn the gate green while it checked nothing.
+
+The job declares `working-directory: frontend`, so the drift-gate path is `src/design-tokens.css` **without** a `frontend/` prefix — a prefixed path would resolve to `frontend/frontend/…` and pass vacuously. [`.gitattributes`](../.gitattributes) pins `*.css text eol=lf` so the export stays byte-identical across platforms and the drift gate compares content rather than line endings.
+
+Note that CI's `push` trigger filter is `branches: ['*']`, which does not match the `/` in this repo's `<type>/<description>` branch names; the gates therefore fire on the pull request rather than on the feature-branch push.
+
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) additionally routes review of `frontend/DESIGN.md`, `frontend/src/design-tokens.css`, `frontend/src/index.css`, `.github/workflows/`, and the frontend dependency manifests. It is **advisory only** until "Require review from Code Owners" is enabled on a `main` branch-protection rule / ruleset in the repository settings — a repo-settings change that no file in this repository can make.
+
 ## 6. External Integrations
 
 ### Jorudan
