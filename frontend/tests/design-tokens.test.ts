@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildTokensCss } from '../scripts/export-design.mjs'
@@ -20,6 +20,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const srcDir = join(root, 'src')
 const indexCssPath = join(srcDir, 'index.css')
 const generatedPath = join(srcDir, 'design-tokens.css')
+const indexHtmlPath = join(root, 'index.html')
 
 function collectCssFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -30,6 +31,13 @@ function collectCssFiles(dir: string): string[] {
 }
 
 const cssFiles = collectCssFiles(srcDir)
+
+/**
+ * Everything a webfont could enter through. The stylesheets are not enough: the most natural way
+ * to add one is a <link rel="stylesheet" href="https://fonts.googleapis.com/..."> in the HTML
+ * entry point, which no CSS-only scan ever sees.
+ */
+const webfontSources = [...cssFiles, indexHtmlPath]
 const allCss = cssFiles.map((file) => readFileSync(file, 'utf-8')).join('\n')
 const indexCss = readFileSync(indexCssPath, 'utf-8')
 const generatedCss = readFileSync(generatedPath, 'utf-8')
@@ -87,6 +95,42 @@ const FONT_SIZE_ALIASES = new Set([
 /** Drops /* ... *\/ comments so a commented-out example is never read as a declaration. */
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+/** Drops <!-- ... --> comments, so prose about a CDN font does not read as a CDN font reference. */
+function stripHtmlComments(html: string): string {
+  return html.replace(/<!--[\s\S]*?-->/g, '')
+}
+
+/**
+ * Every way a remote asset - a CDN font above all - can be pulled into the app, in CSS or in HTML:
+ * an @font-face rule, a Google Fonts host, or an @import / href / src / url() pointing at
+ * http(s):// or at a protocol-relative //. The bare-string `@import "https://…"` form needs its own
+ * arm: it carries neither `url(` nor `=`, so the other arms all miss it.
+ *
+ * Deliberately deny-by-default on *any* remote URL, not just subresource fetches: matching only
+ * `<link …>`/`<script …>` context would have to survive arbitrary attribute order, and a false
+ * negative in a security guard costs more than a false positive here. The entry HTML ships a root
+ * div and nothing else, so it has no business carrying a remote URL of any kind - a navigational
+ * <a href="https://…"> or a rel="canonical" would fail this too, and belongs in the app, not here.
+ *
+ * Local paths are root-relative and carry a single slash (/favicon.svg, /src/main.tsx), so they
+ * never match: banning `href=` outright would take the favicon with it.
+ *
+ * This is a lint against a CDN font being added by accident, not a defence against one being
+ * smuggled in: entity-encoded or CSS-escaped URLs, and URLs assembled at run time, all slip past it
+ * - and anyone willing to do that could delete this test instead. Do not chase those forms.
+ */
+const REMOTE_REFERENCE =
+  /@font-face|fonts\.(?:googleapis|gstatic)|(?:href|src)\s*=\s*['"]?\s*(?:https?:)?\/\/|url\(\s*['"]?\s*(?:https?:)?\/\/|@import\s*['"]\s*(?:https?:)?\/\//i
+
+/**
+ * A source file with its comments stripped, so a mention in prose is never read as a call site.
+ * HTML gets both strippers: an inline <style> block carries CSS comments inside HTML.
+ */
+function scannableSource(file: string): string {
+  const text = readFileSync(file, 'utf-8')
+  return file.endsWith('.html') ? stripComments(stripHtmlComments(text)) : stripComments(text)
 }
 
 /** Custom properties declared in a CSS string, e.g. `--bg-primary: ...` -> `--bg-primary`. */
@@ -360,11 +404,57 @@ describe('call-site hygiene', () => {
     // would be rendered by the Japanese face.
     expect(fontSans.indexOf('Inter')).toBeLessThan(fontSans.indexOf('Hiragino Sans'))
     expect(fontSans.indexOf('Hiragino Sans')).toBeLessThan(fontSans.indexOf('sans-serif'))
-    // No CDN webfont, anywhere (Agent Prompt Guide security rule). Comments are stripped so
-    // that prose *about* @font-face does not read as an @font-face rule.
-    expect(stripComments(allCss)).not.toMatch(
-      /@font-face|fonts\.(googleapis|gstatic)|url\(\s*['"]?https?:/i
-    )
+    // No CDN webfont, anywhere (Agent Prompt Guide security rule) - in the stylesheets *and* in
+    // the HTML entry point, where a <link rel="stylesheet" href="https://fonts.googleapis.com/...">
+    // would otherwise ship past a CSS-only scan. Each file's existence is asserted before it is
+    // read, so renaming index.html away cannot turn this guard into a vacuous pass.
+    expect(webfontSources).toContain(indexHtmlPath)
+    expect(webfontSources).toContain(indexCssPath)
+    expect(cssFiles.length).toBeGreaterThan(2)
+
+    for (const file of webfontSources) {
+      // index.html is the file this can actually catch out: cssFiles comes from readdirSync, so
+      // those paths exist by construction. Renaming or moving index.html away must fail the guard,
+      // never quietly shrink what it scans.
+      expect(existsSync(file), `${file} is missing - the webfont guard would pass vacuously`).toBe(
+        true
+      )
+      expect(scannableSource(file), `${file} references a remote URL`).not.toMatch(REMOTE_REFERENCE)
+    }
+  })
+})
+
+describe('the webfont guard itself', () => {
+  // REMOTE_REFERENCE is only ever asserted negatively, against files that are all clean - so a
+  // typo in one alternative would make the guard toothless and every file would still pass. These
+  // are its positive controls: the bare-string @import below is a real hole this pair caught.
+  // Every alternative needs a case only *it* can catch, or the arm is untested - hence the
+  // dns-prefetch line (no //, so only the host arm sees it) and both @import spellings (the space
+  // after an at-keyword is optional in CSS, and stripComments can itself delete one).
+  it.each([
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter" />',
+    '<link rel="stylesheet" href="//fonts.googleapis.com/css2?family=Inter" />',
+    '<link rel="dns-prefetch" href="fonts.gstatic.com">',
+    '<link rel=stylesheet href=https://use.typekit.net/abc.css>',
+    '<script src="//cdn.example.com/analytics.js"></script>',
+    '@import url("https://fonts.bunny.net/css?family=inter");',
+    '@import "https://fonts.bunny.net/css?family=inter";',
+    '@import"https://fonts.bunny.net/css?family=inter";',
+    "@font-face { font-family: Inter; src: url('/fonts/inter.woff2'); }",
+    '.hero { background: url(//cdn.example.com/hero.png); }',
+  ])('catches %s', (source) => {
+    expect(source).toMatch(REMOTE_REFERENCE)
+  })
+
+  it.each([
+    '<link rel="icon" type="image/svg+xml" href="/favicon.svg" />',
+    '<script type="module" src="/src/main.tsx"></script>',
+    '.hero { background: url(/images/hero.png); }',
+    '.icon { fill: url(#gradient); }',
+    "@import './design-tokens.css';",
+    '@import"./design-tokens.css";',
+  ])('passes %s', (source) => {
+    expect(source).not.toMatch(REMOTE_REFERENCE)
   })
 })
 
