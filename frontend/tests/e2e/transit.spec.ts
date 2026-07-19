@@ -393,6 +393,28 @@ test.describe('CJK typography', () => {
   })
 })
 
+test.describe('Inverted selected chip (issue #95, ADR 0004)', () => {
+  test('keeps the selected tab a near-white chip even while hovered', async ({ page }) => {
+    // The specificity trap: `.tab:hover` (0,2,0) out-specifies `.tabActive` (0,1,0), so an
+    // unscoped hover rule would repaint the selected chip dark - and on iOS :hover sticks after
+    // a tap, so a tap on the selected tab would visibly un-invert it. `:not(.tabActive)` fixes it.
+    await mockApi(page)
+    await page.goto('/')
+
+    const active = page.getByRole('button', { name: ROPPONGI })
+    await expect(active).toHaveAttribute('aria-pressed', 'true')
+    // The inverted chip fill, --bg-inverted #fafafa.
+    expect(await computed(active, 'background-color')).toBe('rgb(250, 250, 250)')
+
+    await active.hover()
+    // `.tab` carries a 100ms `transition: all`, so wait past it and read the settled colour: an
+    // unscoped `.tab:hover` would animate the chip to the dark --bg-secondary fill, but reading
+    // at t=0 would still catch the near-white start frame and miss the regression.
+    await page.waitForTimeout(300)
+    expect(await computed(active, 'background-color')).toBe('rgb(250, 250, 250)')
+  })
+})
+
 test.describe('Computed token values', () => {
   test('paints arrival time with the blue accent and the error banner with red', async ({
     page,

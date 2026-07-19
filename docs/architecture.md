@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: c900150 -->
+<!-- spec-synced-through: 65ee0aa -->
 
 ## 1. Overview
 
@@ -129,7 +129,7 @@ The frontmatter of [`frontend/DESIGN.md`](../frontend/DESIGN.md) is the source o
 
 `frontend/src/index.css` `@import`s the generated file and then declares the hand-authored residue in a single `:root` block:
 
-- **Alias layer** — maps generated names onto the names the existing `*.module.css` call sites use: `--bg-*`, `--border-*`, `--text-primary/secondary/tertiary`, `--accent-*` (from `--color-*`), `--font-size-*` (from `--text-<level>`, which would otherwise collide with the `--text-*` color family), and `--space-*` (from `--spacing-*`). `--radius-sm/md/lg` need no alias — the export already emits those exact names.
+- **Alias layer** — maps generated names onto the names the existing `*.module.css` call sites use: `--bg-*` (including `--bg-inverted`, the selected-tab chip ground), `--border-*`, `--text-primary/secondary/tertiary/inverted`, `--accent-*` (from `--color-*`), `--font-size-*` (from `--text-<level>`, which would otherwise collide with the `--text-*` color family), and `--space-*` (from `--spacing-*`). `--radius-sm/md/lg` need no alias — the export already emits those exact names.
 - **Residue proper** — the tokens `@google/design.md` cannot model, which are their own source of truth: the multi-family font stacks `--font-sans` (Latin → CJK → generic, all OS-bundled faces; no webfont is loaded) / `--font-mono`, and the transition `--transition-fast`.
 
 Translucent colors *are* export-modelable: the exporter passes 8-digit hex (`#rrggbbaa`) through and normalizes `rgba()` into it, so the error-banner tints (`--accent-red-tint` / `--accent-red-tint-border`) live in the frontmatter like any other color. The `design.md` contrast lint is not alpha-aware, though, so those tints are modeled as `textColor`-less surface components and their real (composited) contrast is pinned in Vitest instead.
@@ -430,6 +430,7 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - **call-site hygiene**: `*.module.css` sizes text only from the `--font-size-*` scale (never a raw px), writes no raw `rgba()`/hex color, and no stylesheet loads a webfont (`@font-face` / CDN URL);
 - **`--font-sans` carries a CJK face**, ordered Latin → CJK → generic;
 - **WCAG AA contrast**: `--text-tertiary` clears 4.5:1 on `bg-primary`/`secondary`/`tertiary`, the error banner's text clears 4.5:1 against its *composited* translucent tint, and the empty-state text clears 4.5:1 on its elevated card. A negative control asserts the pre-ADR value (`#737373`) still fails, so the ratio maths cannot go vacuously green;
+- **outdoor-legibility inverted chip (ADR 0004)**: reads the actual `.tabActive` declarations out of `App.module.css` and resolves them through the alias/generated pipeline — not just the token value, so repointing the chip back at `--bg-secondary` fails the test rather than passing vacuously — then asserts the selected chip fill clears 3:1 against the unselected-tab substrate (WCAG 1.4.11), its label clears 4.5:1 on the chip fill (WCAG 1.4.3), and the `--accent-blue` focus ring clears 3:1 against both the near-white chip and `--bg-primary`. A teeth test pins the old `#111111` fill at 1.05:1 (< 3:1) so the 3:1 checks cannot go vacuously green;
 - **`design.md lint` reports zero errors and zero warnings** — this runs the pinned local bin from the test suite, so the frontmatter's lint cleanliness is enforced by `npm test` (which CI runs) rather than only by hand.
 
 ### Frontend Accessibility & Responsive Conventions
@@ -450,7 +451,8 @@ Rules that hold across the frontend's stylesheets, not just one component:
 - the 44×44 hit areas, measured by probing `document.elementFromPoint` outwards from each control's centre (`boundingBox()` cannot see the `::after`), plus that a crowded tab strip scrolls rather than clipping its labels;
 - `animation-name: none` for the spinner and the pulse dot under an emulated `reducedMotion: 'reduce'`, and that both animate when no preference is set;
 - the computed CJK values (`line-break`, line-height ratio, `letter-spacing`, `word-break`) and that `break-word` reaches `.rawRoute` alone;
-- the computed accent/surface colors of the arrival time, the error banner, and the empty card.
+- the computed accent/surface colors of the arrival time, the error banner, and the empty card;
+- that the selected origin tab stays a near-white inverted chip (`rgb(250, 250, 250)`, `--bg-inverted`) even while hovered — reading the settled colour after the 100ms transition — which guards the `.tab:hover:not(.tabActive)` specificity fix (ADR 0004).
 
 CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but **does not run Playwright** — the E2E suite is a local gate.
 
