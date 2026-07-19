@@ -159,6 +159,18 @@ test.describe('Transit App', () => {
     await expect(page.getByText('19:38')).toBeVisible()
   })
 
+  test('paints the card outline at the outdoor-legibility border (issue #96)', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByText('18:49')).toBeVisible()
+
+    // The card fill rises to --bg-elevated (#1a1a1a) and the outline to --border-tertiary
+    // (#666666), so the card keeps a perceivable edge under outdoor glare (ADR 0004).
+    const card = page.locator('[class*="_card_"]').first()
+    await expect(card).toBeVisible()
+    expect(await computed(card, 'background-color')).toBe('rgb(26, 26, 26)')
+    expect(await computed(card, 'border-top-color')).toBe('rgb(102, 102, 102)')
+  })
+
   test('should mark the active tab with aria-pressed', async ({ page }) => {
     await page.goto('/')
 

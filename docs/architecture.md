@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: 65ee0aa -->
+<!-- spec-synced-through: e50f968 -->
 
 ## 1. Overview
 
@@ -431,6 +431,7 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 - **`--font-sans` carries a CJK face**, ordered Latin → CJK → generic;
 - **WCAG AA contrast**: `--text-tertiary` clears 4.5:1 on `bg-primary`/`secondary`/`tertiary`, the error banner's text clears 4.5:1 against its *composited* translucent tint, and the empty-state text clears 4.5:1 on its elevated card. A negative control asserts the pre-ADR value (`#737373`) still fails, so the ratio maths cannot go vacuously green;
 - **outdoor-legibility inverted chip (ADR 0004)**: reads the actual `.tabActive` declarations out of `App.module.css` and resolves them through the alias/generated pipeline — not just the token value, so repointing the chip back at `--bg-secondary` fails the test rather than passing vacuously — then asserts the selected chip fill clears 3:1 against the unselected-tab substrate (WCAG 1.4.11), its label clears 4.5:1 on the chip fill (WCAG 1.4.3), and the `--accent-blue` focus ring clears 3:1 against both the near-white chip and `--bg-primary`. A teeth test pins the old `#111111` fill at 1.05:1 (< 3:1) so the 3:1 checks cannot go vacuously green;
+- **outdoor-legibility card outline (issue #96, ADR 0004)**: reads the actual `.card` / `.card:hover` declarations out of `TransitCard.module.css` and resolves them through the token pipeline — not just the token value, so repointing the card back at `--border-primary` fails the test rather than passing vacuously — then asserts the resting card outline (`--border-tertiary`) clears 2:1 against both the page ground and the card's own `--bg-elevated` fill (a **house** threshold matching Material 3's `outlineVariant` parity, explicitly not a WCAG boundary requirement), the hover outline (`--border-elevated`) is strictly brighter than the resting outline (no inverted ramp), and `--accent-blue` clears 4.5:1 on the elevated card fill (pinning the card ground at its AA ceiling). A teeth test pins the old `#262626` and `#333333` outlines below 2:1 against the page so the checks cannot go vacuously green;
 - **`design.md lint` reports zero errors and zero warnings** — this runs the pinned local bin from the test suite, so the frontmatter's lint cleanliness is enforced by `npm test` (which CI runs) rather than only by hand.
 
 ### Frontend Accessibility & Responsive Conventions
@@ -451,7 +452,7 @@ Rules that hold across the frontend's stylesheets, not just one component:
 - the 44×44 hit areas, measured by probing `document.elementFromPoint` outwards from each control's centre (`boundingBox()` cannot see the `::after`), plus that a crowded tab strip scrolls rather than clipping its labels;
 - `animation-name: none` for the spinner and the pulse dot under an emulated `reducedMotion: 'reduce'`, and that both animate when no preference is set;
 - the computed CJK values (`line-break`, line-height ratio, `letter-spacing`, `word-break`) and that `break-word` reaches `.rawRoute` alone;
-- the computed accent/surface colors of the arrival time, the error banner, and the empty card;
+- the computed accent/surface colors of the arrival time, the error banner, and the empty card, plus the card's elevated `--bg-elevated` fill (`rgb(26, 26, 26)`) and `--border-tertiary` outdoor-legibility outline (`rgb(102, 102, 102)`);
 - that the selected origin tab stays a near-white inverted chip (`rgb(250, 250, 250)`, `--bg-inverted`) even while hovered — reading the settled colour after the 100ms transition — which guards the `.tab:hover:not(.tabActive)` specificity fix (ADR 0004).
 
 CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but **does not run Playwright** — the E2E suite is a local gate.
