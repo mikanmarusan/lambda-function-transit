@@ -26,6 +26,8 @@
 
   --border-primary: var(--color-border-primary);
   --border-secondary: var(--color-border-secondary);
+  --border-tertiary: var(--color-border-tertiary);
+  --border-elevated: var(--color-border-elevated);
 
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);

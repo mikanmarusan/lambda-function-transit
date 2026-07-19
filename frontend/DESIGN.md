@@ -13,6 +13,8 @@ colors:
   bg-elevated: "#1a1a1a"
   border-primary: "#262626"
   border-secondary: "#333333"
+  border-tertiary: "#666666"
+  border-elevated: "#8a8a8a"
   text-primary: "#fafafa"
   text-secondary: "#a1a1a1"
   text-tertiary: "#8a8a8a"
@@ -65,16 +67,16 @@ spacing:
   12: 48px
 components:
   card:
-    backgroundColor: "{colors.bg-secondary}"
+    backgroundColor: "{colors.bg-elevated}"
     textColor: "{colors.text-primary}"
     typography: "{typography.base}"
     rounded: "{rounded.lg}"
     padding: "{spacing.4}"
   card-border:
-    backgroundColor: "{colors.border-primary}"
+    backgroundColor: "{colors.border-tertiary}"
     height: 1px
   card-border-hover:
-    backgroundColor: "{colors.border-secondary}"
+    backgroundColor: "{colors.border-elevated}"
     height: 1px
   tab:
     backgroundColor: "{colors.bg-primary}"
@@ -104,6 +106,9 @@ components:
     textColor: "{colors.text-secondary}"
     typography: "{typography.xs}"
     rounded: "{rounded.sm}"
+  badge-border:
+    backgroundColor: "{colors.border-tertiary}"
+    height: 1px
   status-indicator:
     backgroundColor: "{colors.bg-secondary}"
     textColor: "{colors.text-secondary}"
@@ -210,7 +215,7 @@ components:
 
 - **ダーク専用**の単一テーマ。`index.html` は `<html lang="ja">`、`<meta name="theme-color" content="#0a0a0a">`、
   `<title>Transit - 六本木一丁目 → つつじヶ丘</title>`。
-- **影を使わない border ベースの奥行き**（詳細は Elevation & Depth）。背景4段とボーダー2段で階層を表現する。
+- **影を使わない border ベースの奥行き**（詳細は Elevation & Depth）。背景4段とボーダー4段で階層を表現する。
 - **4px グリッド**（`--space-*`、Layout）。**最大幅 600px の単一カラム**を中央寄せした、グランス用（一瞥用）ボード。
 - 日本語（駅名・所要時間・`つつじヶ丘`）と Latin 等幅（時刻・ステータスのタイムスタンプ）の**混植**。
 - 出典: `frontend/index.html`、`frontend/src/index.css`、ルート `CLAUDE.md` の "Frontend Design"。
@@ -230,11 +235,13 @@ components:
 | トークン（呼び出し名） | frontmatter | 値 | 役割（実使用） |
 |---|---|---|---|
 | `--bg-primary` | `colors.bg-primary` | `#0a0a0a` | ページ地・ヘッダー地（純黒を避けた最暗段） |
-| `--bg-secondary` | `colors.bg-secondary` | `#111111` | カード地・タブ active 地・refresh ボタン地・StatusIndicator 地 |
-| `--bg-tertiary` | `colors.bg-tertiary` | `#171717` | バッジ地・RouteDetail コンテナ地・refresh hover 地 |
-| `--bg-elevated` | `colors.bg-elevated` | `#1a1a1a` | 最上段の面。**空状態カードの地**（`.empty`。TD#4 で役割確定） |
-| `--border-primary` | `colors.border-primary` | `#262626` | 既定のボーダー（カード・タブ・ボタン・区切り線・空状態カード） |
-| `--border-secondary` | `colors.border-secondary` | `#333333` | hover / active 時の一段明るいボーダー・タイムライン縦線・lineName 左罫 |
+| `--bg-secondary` | `colors.bg-secondary` | `#111111` | タブ hover 地・refresh ボタン地・StatusIndicator 地 |
+| `--bg-tertiary` | `colors.bg-tertiary` | `#171717` | RouteDetail コンテナ地・refresh hover 地 |
+| `--bg-elevated` | `colors.bg-elevated` | `#1a1a1a` | 最上段の面。**カード地**（TransitCard・空状態カード `.empty`）。屋外可読性のためカード地をこの段まで引き上げた（issue #96 / ADR 0004 D-4 が上限。`--accent-blue` 到着時刻が 4.73:1 でぎりぎり AA） |
+| `--border-primary` | `colors.border-primary` | `#262626` | 既定のボーダー（タブ・ボタン・区切り線・空状態カード） |
+| `--border-secondary` | `colors.border-secondary` | `#333333` | refresh ボタン hover / active の一段明るいボーダー・タイムライン縦線・lineName 左罫・スクロールバー thumb |
+| `--border-tertiary` | `colors.border-tertiary` | `#666666` | カードの既定アウトライン・バッジのアウトライン。ページ地に 3.45:1 / カード地に 3.03:1（issue #96 / ADR 0004。2:1 の house 閾値を満たす） |
+| `--border-elevated` | `colors.border-elevated` | `#8a8a8a` | カード hover 時のアウトライン（resting `--border-tertiary` より明るい＝ボーダーランプは単調） |
 | `--text-primary` | `colors.text-primary` | `#fafafa` | 本文・主要テキスト |
 | `--text-secondary` | `colors.text-secondary` | `#a1a1a1` | 補助テキスト（タブ非選択・ステータスラベル・ローディング文言・空状態文言） |
 | `--text-tertiary` | `colors.text-tertiary` | `#8a8a8a` | 装飾・最小ウェイト（矢印・フッター・タイムスタンプ・路線名）。**WCAG AA 達成値**（ADR 0003 D-E） |
@@ -378,8 +385,11 @@ components:
 
 - **影（box-shadow）を一切使わない。** 参照テンプレートの shadow 立体モデルからの**意図的な乖離**。
 - 奥行きは**背景4段**（`--bg-primary` → `--bg-secondary` → `--bg-tertiary` → `--bg-elevated`）と
-  **ボーダー2段**（`--border-primary` → `--border-secondary`）で表現する。
-- hover はボーダーを一段明るく（`--border-primary` → `--border-secondary`）。
+  **ボーダー4段**（`--border-primary` → `--border-secondary` → `--border-tertiary` → `--border-elevated`）で表現する。
+  ボーダーランプは単調に明るくなる（`#262626` → `#333333` → `#666666` → `#8a8a8a`）。カードは屋外グレア下でも
+  縁が残るよう `--border-tertiary`（ページ地に 3.45:1、house 閾値 2:1 を満たす）を既定アウトラインに使う（issue #96 / ADR 0004）。
+- hover はボーダーを一段明るくする（refresh ボタン: `--border-primary` → `--border-secondary`／
+  カード: `--border-tertiary` → `--border-elevated`）。
 - **focus-visible**: `outline: 2px solid var(--accent-blue); outline-offset: 2px`（全要素共通、`index.css` の
   reset/focus 区画）。frontmatter では `components.focus-ring` として記録。
 
@@ -475,12 +485,15 @@ components:
 
 #### TransitCard（`TransitCard.tsx` / `TransitCard.module.css`）
 
-- `.card`: 地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-lg`、`overflow: hidden`、
-  `transition: border-color --transition-fast`。`.card:hover` でボーダー `--border-secondary`。
+- `.card`: 地 `--bg-elevated`、ボーダー `--border-tertiary`、`--radius-lg`、`overflow: hidden`、
+  `transition: border-color --transition-fast`。`.card:hover` でボーダー `--border-elevated`（resting `--border-tertiary` より
+  **明るい**。旧 `--border-secondary` #333333 は今や resting より暗く、残すと hover がカードを暗く沈ませる逆ランプになる。issue #96 / ADR 0004）。
 - `.header`（button）: `gap: --space-4`、padding `--space-4`、`background: none; border: none; font: inherit`、`aria-expanded={expanded}`。
 - `.times`: `.departure`/`.arrival` は `--font-size-xl`/`600`/`--font-mono`/`letter-spacing: -0.02em`。`.arrival` は色 `--accent-blue`。
   区切りの `.arrow`（`→`）は `--text-tertiary`/`--font-size-md`。
-- `.meta`: `.badge` ×2（`Clock` 12/bold + 所要、`ArrowsDownUp` 12/bold + 乗換回数）。バッジは地 `--bg-tertiary`、`--radius-sm`、`--font-size-xs`/`500`、色 `--text-secondary`。
+- `.meta`: `.badge` ×2（`Clock` 12/bold + 所要、`ArrowsDownUp` 12/bold + 乗換回数）。バッジは**アウトライン idiom**
+  （地 `transparent`・`1px solid --border-tertiary`。`components.badge-border`）、`--radius-sm`、`--font-size-xs`/`500`、色 `--text-secondary`。
+  旧 `--bg-tertiary` #171717 塗りは引き上げたカード地 #1a1a1a に対し 1.03:1 でカードより暗く沈むため、未選択 `.tab` と同じアウトライン idiom に寄せた（issue #96）。ラベルはカード地 #1a1a1a で 6.74:1。
 - `.expandIcon`: `CaretUp`（展開時）/ `CaretDown`（折りたたみ時）、16、色 `--text-tertiary`。
 - `.body`: padding `0 --space-4 --space-4`、`RouteDetail` を内包。
 - **先頭カード（`index === 0`）は既定で展開**（`useState(index === 0)`）。

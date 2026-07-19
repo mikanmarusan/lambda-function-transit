@@ -573,6 +573,62 @@ describe('outdoor-legibility inverted chip (issue #95, ADR 0004)', () => {
   })
 })
 
+describe('outdoor-legibility card outline (issue #96, ADR 0004)', () => {
+  // The 2:1 card-border thresholds below are a HOUSE threshold, NOT a WCAG one: WCAG 1.4.11
+  // explicitly does not require a boundary on a container, and no 2:1 value exists anywhere in
+  // WCAG. The provenance is parity with Material 3's outlineVariant (1.99:1 on its dark surface).
+  // Do not relabel these as WCAG (ADR 0004 D-2).
+  //
+  // These read the declaration off TransitCard.module.css, not just the token value: a
+  // token-only contract stays green even if .card is repointed back at --border-primary (the
+  // 1.31:1 regression this exists to prevent). borderColor()/paintedCardColor() throw when the
+  // rule or property is missing, so deleting a rule fails the test rather than skipping it.
+  const cardModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'TransitCard.module.css'), 'utf-8')
+  )
+
+  /** The card fill actually painted by a rule, resolved through the token pipeline. */
+  function paintedCardColor(selector: string, property: string): string {
+    return resolveColor(declaredValue(ruleBody(cardModuleCss, selector), property, selector))
+  }
+
+  /** The border colour of a rule, whether written as `border: 1px solid var(--x)` or `border-color: var(--x)`. */
+  function borderColor(selector: string): string {
+    const body = ruleBody(cardModuleCss, selector)
+    const match = /border(?:-color)?\s*:\s*(?:[^;}]*?\s)?(var\(\s*--[\w-]+\s*\))/.exec(body)
+    if (!match) throw new Error(`no border colour in .${selector} rule`)
+    return resolveColor(match[1])
+  }
+
+  const page = parseHex(token('--color-bg-primary'))
+  const cardFill = paintedCardColor('card', 'background-color')
+  const cardBorder = borderColor('card')
+  const cardHoverBorder = borderColor('card:hover')
+
+  it('paints the card border vs the page ground at >= 2:1 (house threshold, outlineVariant parity)', () => {
+    expect(contrastRatio(parseHex(cardBorder), page)).toBeGreaterThanOrEqual(2)
+  })
+
+  it('paints the card border vs the card fill at >= 2:1 (an edge must separate from both sides)', () => {
+    expect(contrastRatio(parseHex(cardBorder), parseHex(cardFill))).toBeGreaterThanOrEqual(2)
+  })
+
+  it('paints the hover border strictly brighter than the resting border (no inverted ramp)', () => {
+    expect(luminance(parseHex(cardHoverBorder))).toBeGreaterThan(luminance(parseHex(cardBorder)))
+  })
+
+  it('paints --accent-blue on the card fill at >= 4.5:1 (pins the card ground at its AA ceiling)', () => {
+    expect(contrastRatio(parseHex(token('--color-accent-blue')), parseHex(cardFill))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('still fails the old card border values (#262626 and #333333 < 2:1 vs the page), proving the check has teeth', () => {
+    // Guards the guard: both are what a well-meaning reviewer would propose. If either ever
+    // reaches 2:1 the ratio maths has broken and the contracts above would be vacuously green.
+    expect(contrastRatio(parseHex('#262626'), page)).toBeLessThan(2)
+    expect(contrastRatio(parseHex('#333333'), page)).toBeLessThan(2)
+  })
+})
+
 describe('DESIGN.md lint', () => {
   it('reports zero errors and zero warnings', () => {
     // design.md lint exits 0 even with warnings, and CI does not run `lint:design` as its own
