@@ -96,15 +96,21 @@
   white-space: nowrap;
 }
 
-.tab:hover {
+/* Scoped :not(.tabActive): `.tab:hover` is (0,2,0) and `.tabActive` is (0,1,0), so an unscoped
+   hover rule OUT-SPECIFIES the active rule. Once the chip turns white that matters - on iOS
+   :hover sticks after a tap, so hovering the selected tab would repaint the chip you just
+   selected back to the dark unselected fill. */
+.tab:hover:not(.tabActive) {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
 
+/* Inverted chip: near-white fill, near-black label (ADR 0004). Takes selected-vs-unselected
+   separation from 1.05:1 to 18.97:1 - the only element that survives a 20% outdoor veil. */
 .tabActive {
-  background-color: var(--bg-secondary);
-  border-color: var(--border-secondary);
-  color: var(--text-primary);
+  background-color: var(--bg-inverted);
+  border-color: var(--bg-inverted);
+  color: var(--text-inverted);
 }
 
 .route {

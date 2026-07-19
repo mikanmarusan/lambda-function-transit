@@ -16,6 +16,8 @@ colors:
   text-primary: "#fafafa"
   text-secondary: "#a1a1a1"
   text-tertiary: "#8a8a8a"
+  bg-inverted: "#fafafa"
+  text-inverted: "#0a0a0a"
   accent-blue: "#3b82f6"
   accent-blue-hover: "#2563eb"
   accent-green: "#22c55e"
@@ -81,10 +83,13 @@ components:
     rounded: "{rounded.md}"
     padding: "{spacing.1}"
   tab-active:
-    backgroundColor: "{colors.bg-secondary}"
-    textColor: "{colors.text-primary}"
+    backgroundColor: "{colors.bg-inverted}"
+    textColor: "{colors.text-inverted}"
     typography: "{typography.base}"
     rounded: "{rounded.md}"
+  tab-border:
+    backgroundColor: "{colors.border-primary}"
+    height: 1px
   refresh-button:
     backgroundColor: "{colors.bg-secondary}"
     textColor: "{colors.text-primary}"
@@ -233,6 +238,8 @@ components:
 | `--text-primary` | `colors.text-primary` | `#fafafa` | 本文・主要テキスト |
 | `--text-secondary` | `colors.text-secondary` | `#a1a1a1` | 補助テキスト（タブ非選択・ステータスラベル・ローディング文言・空状態文言） |
 | `--text-tertiary` | `colors.text-tertiary` | `#8a8a8a` | 装飾・最小ウェイト（矢印・フッター・タイムスタンプ・路線名）。**WCAG AA 達成値**（ADR 0003 D-E） |
+| `--bg-inverted` | `colors.bg-inverted` | `#fafafa` | 選択中タブ（反転チップ）の地。屋外グレア下で選択状態が唯一残る近白面（ADR 0004。地に `--text-*` を塗らないための専用ロール） |
+| `--text-inverted` | `colors.text-inverted` | `#0a0a0a` | 選択中タブ（反転チップ）のラベル。近白地に対し 18.97:1（ADR 0004） |
 | `--accent-blue` | `colors.accent-blue` | `#3b82f6` | 到着時刻・ロゴ・タイムライン dot・active ボーダー・focus リング |
 | `--accent-blue-hover` | `colors.accent-blue-hover` | `#2563eb` | refresh ボタンの**押下（`:active`）地／罫**（TD#4 で役割確定） |
 | `--accent-green` | `colors.accent-green` | `#22c55e` | status OK アイコン（Connected） |
@@ -428,7 +435,12 @@ components:
   `--radius-md`、色 `--text-secondary`、`--font-size-base`/`500`、`line-height: 1.6`・`word-break: normal`・
   `line-break: strict`（CJK 体裁）、`white-space: nowrap`、`transition: all --transition-fast`。
   選択状態は **`aria-pressed`**（`origin === activeOrigin`）で支援技術に出す。
-- `.tab:hover`: 地 `--bg-secondary`、色 `--text-primary`。`.tabActive`: 地 `--bg-secondary`、ボーダー `--border-secondary`、色 `--text-primary`。
+- `.tab:hover:not(.tabActive)`: 地 `--bg-secondary`、色 `--text-primary`。**`:not(.tabActive)` で非選択タブに限定する**のは
+  必須: 無印 `.tab:hover`(0,2,0) は `.tabActive`(0,1,0) を出し抜くため、反転チップが白になった瞬間、選択中タブをホバー
+  すると地が暗く塗り戻る（iOS ではタップ後に `:hover` が残る）。`.tabActive`: **反転チップ**。地/ボーダー `--bg-inverted`
+  （近白）、ラベル `--text-inverted`（近黒）。選択 vs 非選択のコントラストを 1.05:1 → **18.97:1** に上げ、屋外の 20% グレア
+  veil 下でも選択状態が残る唯一の要素（ADR 0004）。非選択タブの 1px ボーダーは `--border-primary`（frontmatter
+  `components.tab-border`）。
 - `.route`: `activeOrigin` + `ArrowRight`（16, 色 `--text-tertiary`）+ `つつじヶ丘`。`.station` は `--font-size-md`/`500`/
   `--text-primary`、`line-height: 1.6`・`word-break: normal`・`line-break: strict`。
 - `.refreshButton`: **視覚 `32px × 32px`**、地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-md`、

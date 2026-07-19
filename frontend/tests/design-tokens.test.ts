@@ -210,6 +210,52 @@ function token(name: string): string {
   return value
 }
 
+/**
+ * The App module CSS, read as the source of truth for what a rule *actually paints* - a
+ * token-value-only contrast contract passes vacuously (it stays green even if someone repoints
+ * .tabActive back at --bg-secondary, the exact regression issue #95 exists to prevent). These
+ * helpers read the declaration off the rule and throw when the rule or property is absent, so
+ * deleting the rule fails the test rather than skipping it.
+ */
+const appModuleCss = stripComments(readFileSync(join(srcDir, 'App.module.css'), 'utf-8'))
+
+/** The body of a single-class rule `.name { ... }`. Throws when there is no such rule. */
+function ruleBody(css: string, selector: string): string {
+  const match = new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)
+  if (!match) throw new Error(`no .${selector} rule in App.module.css`)
+  return match[1]
+}
+
+/** A single property's value inside a rule body. Throws when the property is not declared. */
+function declaredValue(body: string, property: string, selector: string): string {
+  const match = new RegExp(`(?:^|;|\\{)\\s*${property}\\s*:\\s*([^;}]+)`).exec(body)
+  if (!match) throw new Error(`no ${property} in .${selector} rule`)
+  return match[1].trim()
+}
+
+/** Follows a `var(--x)` chain through the index.css alias layer down to the generated literal. */
+const aliasValues = new Map(rootDeclarations(indexCss))
+function resolveColor(value: string): string {
+  let current = value.trim()
+  const seen = new Set<string>()
+  while (current.startsWith('var(')) {
+    const ref = /^var\(\s*(--[\w-]+)\s*\)$/.exec(current)
+    if (!ref) throw new Error(`cannot resolve non-var() reference: ${current}`)
+    const name = ref[1]
+    if (seen.has(name)) throw new Error(`cycle while resolving ${name}`)
+    seen.add(name)
+    const next = aliasValues.get(name) ?? generatedValues.get(name)
+    if (next === undefined) throw new Error(`token not defined anywhere: ${name}`)
+    current = next.trim()
+  }
+  return current
+}
+
+/** The hex a rule's colour property actually paints, resolved through the token pipeline. */
+function paintedColor(selector: string, property: string): string {
+  return resolveColor(declaredValue(ruleBody(appModuleCss, selector), property, selector))
+}
+
 describe('design token pipeline', () => {
   it('has CSS sources to check', () => {
     expect(cssFiles).toContain(generatedPath)
@@ -486,6 +532,44 @@ describe('WCAG AA contrast (ADR 0003 D-E)', () => {
     // the AA tests above would be vacuously green.
     const ratio = contrastRatio(parseHex('#737373'), parseHex(token('--color-bg-primary')))
     expect(ratio).toBeLessThan(4.5)
+  })
+})
+
+describe('outdoor-legibility inverted chip (issue #95, ADR 0004)', () => {
+  // These read the CSS declaration off .tabActive, not just the token value: a token-only
+  // contract stays green even if .tabActive is repointed back at --bg-secondary, which is the
+  // exact 1.05:1 regression this exists to prevent. paintedColor() throws when the rule or the
+  // property it guards is missing, so deleting the rule fails the test rather than skipping it.
+  const chipFill = paintedColor('tabActive', 'background-color')
+  const chipLabel = paintedColor('tabActive', 'color')
+  const tabFill = declaredValue(ruleBody(appModuleCss, 'tab'), 'background-color', 'tab')
+  // An unselected tab paints `transparent`, so its effective substrate is the page ground.
+  const tabSubstrate = tabFill === 'transparent' ? token('--color-bg-primary') : resolveColor(tabFill)
+
+  it('paints the selected chip vs the unselected tab substrate at >= 3:1 (WCAG 1.4.11)', () => {
+    const ratio = contrastRatio(parseHex(chipFill), parseHex(tabSubstrate))
+    expect(ratio).toBeGreaterThanOrEqual(3)
+  })
+
+  it('paints the chip label on the chip fill at >= 4.5:1 (WCAG 1.4.3)', () => {
+    const ratio = contrastRatio(parseHex(chipLabel), parseHex(chipFill))
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each([
+    ['the chip fill', () => chipFill],
+    ['--bg-primary', () => token('--color-bg-primary')],
+  ])('keeps the focus ring (--accent-blue) at >= 3:1 against %s', (_label, background) => {
+    // The white chip is the one surface that could swallow the blue focus ring; pin both grounds.
+    const ratio = contrastRatio(parseHex(token('--color-accent-blue')), parseHex(background()))
+    expect(ratio).toBeGreaterThanOrEqual(3)
+  })
+
+  it('still fails the old .tabActive fill (#111111 = 1.05:1), proving the 3:1 check has teeth', () => {
+    // Guards the guard: the old fill sat at 1.05:1 on the page ground. If this ever reaches 3:1
+    // the ratio maths has broken and the contract above would be vacuously green.
+    const ratio = contrastRatio(parseHex('#111111'), parseHex(token('--color-bg-primary')))
+    expect(ratio).toBeLessThan(3)
   })
 })
 
