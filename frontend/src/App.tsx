@@ -3,7 +3,32 @@ import { ArrowRight, ArrowClockwise, Train, Spinner, Tray } from '@phosphor-icon
 import { useTransit, useApiStatus } from './hooks/useTransit'
 import { TransitCard } from './components/TransitCard'
 import { StatusIndicator } from './components/StatusIndicator'
+import { parseSummary } from './types/transit'
 import styles from './App.module.css'
+
+/** Minutes since midnight for a strict `HH:MM` string; the caller filters `--:--` first. */
+function toMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+/**
+ * Index of the candidate to run for -- the earliest departure -- or null to mark nothing.
+ * Derived from the data, never from card position: the backend slices Jorudan's blocks with
+ * no sort, and Jorudan ranks by route quality, so index 0 is not "soonest" (ADR 0004 D-3).
+ * - Any `--:--` (failed parse) marks nothing: the string sorts before every digit and
+ *   would falsely win.
+ * - A spread over 6 hours suggests a midnight wrap ("23:58" vs "00:12"); marking either
+ *   card would be a guess, so mark nothing.
+ * - Ties mark the first (indexOf returns the first occurrence).
+ */
+function deriveNextIndex(departureTimes: string[]): number | null {
+  if (departureTimes.length === 0) return null
+  if (departureTimes.some(time => time === '--:--')) return null
+  const minutes = departureTimes.map(toMinutes)
+  if (Math.max(...minutes) - Math.min(...minutes) > 360) return null
+  return minutes.indexOf(Math.min(...minutes))
+}
 
 function App() {
   const { originRoutes, loading, error, lastUpdated, refresh } = useTransit()
@@ -13,6 +38,8 @@ function App() {
   const [selectedOrigin, setSelectedOrigin] = useState<string | null>(null)
   const activeOrigin = selectedOrigin ?? origins[0] ?? null
   const activeRoutes = originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []
+  const departureTimes = activeRoutes.map(route => parseSummary(route.summary).departureTime)
+  const nextIndex = deriveNextIndex(departureTimes)
 
   return (
     <div className={styles.app}>
@@ -95,8 +122,17 @@ function App() {
 
             {!error && activeRoutes.length > 0 && (
               <div className={styles.cards}>
+                {/* Key by the train's identity, not its position: React reuses instances by
+                    key and useState initializers only run on mount, so a positional key would
+                    leave a stale card expanded after a tab switch or refresh. The index
+                    tiebreaker only guards against two candidates sharing a departure time
+                    (duplicate keys); the origin + time prefix still forces the remount. */}
                 {activeRoutes.map((route, index) => (
-                  <TransitCard key={index} route={route} index={index} />
+                  <TransitCard
+                    key={`${activeOrigin}-${departureTimes[index]}-${index}`}
+                    route={route}
+                    isNext={index === nextIndex}
+                  />
                 ))}
               </div>
             )}

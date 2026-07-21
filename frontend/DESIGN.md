@@ -78,6 +78,9 @@ components:
   card-border-hover:
     backgroundColor: "{colors.border-elevated}"
     height: 1px
+  card-marker-next:
+    backgroundColor: "{colors.accent-blue}"
+    width: "{spacing.1}"
   tab:
     backgroundColor: "{colors.bg-primary}"
     textColor: "{colors.text-secondary}"
@@ -496,7 +499,22 @@ components:
   旧 `--bg-tertiary` #171717 塗りは引き上げたカード地 #1a1a1a に対し 1.03:1 でカードより暗く沈むため、未選択 `.tab` と同じアウトライン idiom に寄せた（issue #96）。ラベルはカード地 #1a1a1a で 6.74:1。
 - `.expandIcon`: `CaretUp`（展開時）/ `CaretDown`（折りたたみ時）、16、色 `--text-tertiary`。
 - `.body`: padding `0 --space-4 --space-4`、`RouteDetail` を内包。
-- **先頭カード（`index === 0`）は既定で展開**（`useState(index === 0)`）。
+- **次発マーカー `.cardNext`**（issue #97 / ADR 0004 D-3）: **最早出発のカード**の左端に `width: --space-1`（4px）・
+  `--accent-blue` の縦キーライン（`components.card-marker-next`）。`position: absolute` の `::before` で描く
+  （左ボーダーは `--radius-lg` の角で楔状に潰れ、カード内容を 4px 右へずらして 2 枚の出発時刻の縦揃えを壊す。
+  影は Elevation & Depth で全面禁止）。`pointer-events: none` 必須: 擬似要素のヒットテストは `.card` に落ちるため、
+  無いと 4px 帯が `.header` ボタンへのクリックを飲み込む。
+  **マーク対象はデータから導出し、カード位置から推定しない**: バックエンドは Jorudan の候補を**ソートせずに** slice し、
+  Jorudan は経路品質順に並べるため、`index === 0` は「最早」を意味しない。`App.tsx` の `deriveNextIndex()` が
+  `parseSummary().departureTime` から最早出発の index を導出する。ガード 3 件: いずれかが `--:--`（パース失敗）なら
+  マークなし（文字列比較で `--:--` が全数字に先勝ちするため）、時刻差が 6 時間超なら深夜跨ぎを疑いマークなし、
+  同時刻タイは先頭。屋外 20% グレア veil 下で青は ~1.92:1 まで潰れるため、マーカーは単独キャリアではない:
+  既定展開と `visually-hidden` ラベルが冗長キューを担う（ADR 0004 の honest limits）。
+  擬似要素は支援技術に見えないため、`isNext` のとき `.header` ボタン内に
+  `<span className="visually-hidden">Next departure </span>`（グローバル `index.css` のユーティリティ）を置く。
+- **次発カード（`isNext`）は既定で展開**（`useState(isNext)`）。カードの `key` は位置ではなく列車の同一性
+  （`` `${activeOrigin}-${departureTime}-${index}` ``）: React は key でインスタンスを再利用し `useState` の初期化子は
+  マウント時しか走らないため、`key={index}` ではタブ切替・リフレッシュ後にマーカーと展開カードがズレる。
 
 #### RouteDetail（`RouteDetail.tsx` / `RouteDetail.module.css`）
 
@@ -670,7 +688,7 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 | 2 | エラーバナー（固定 `Failed to load transit information`、`role="alert"`。hook の error 文字列は非表示） | `App.tsx` `error &&` / `.error` |
 | 3 | リフレッシュ中（refresh ボタン内 `Spinner` 16・既存カードは残る） | `App.tsx` `refreshButton disabled={loading}` |
 | 4 | 空状態（`routes=[]`・`loading=false`・`lastUpdated` あり・`error=null` → `.empty` カード `Tray`(24) + `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
-| 5 | 先頭カード既定展開（`index === 0`） | `TransitCard.tsx` `useState(index === 0)` |
+| 5 | 次発カード既定展開＋左キーライン（最早出発をデータから導出。パース失敗・6時間超の時刻差ではマークなし） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `deriveNextIndex()` / `.cardNext` |
 | 6 | カード展開／折りたたみ | `TransitCard.tsx` `expanded` トグル |
 | 7 | タブ active | `App.module.css` `.tabActive` |
 | 8 | タブ inactive | `.tab` 既定 |

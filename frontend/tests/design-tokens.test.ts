@@ -629,6 +629,57 @@ describe('outdoor-legibility card outline (issue #96, ADR 0004)', () => {
   })
 })
 
+describe('next-departure keyline (issue #97, ADR 0004 D-3)', () => {
+  // Reads the declarations off .cardNext::before, not just the token values: a token-only
+  // contract stays green even if the rule is repointed at a washed-out colour or deleted.
+  // The regex throws via the assertion below when the rule is missing, so removing the
+  // keyline fails the test rather than skipping it.
+  const cardModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'TransitCard.module.css'), 'utf-8')
+  )
+  const markerBody = /\.cardNext::before\s*\{([^}]*)\}/.exec(cardModuleCss)?.[1]
+
+  it('declares the .cardNext::before keyline rule', () => {
+    expect(markerBody).toBeDefined()
+  })
+
+  it('paints the keyline vs the card fill at >= 3:1 (WCAG 1.4.11 non-text contrast)', () => {
+    const markerFill = resolveColor(declaredValue(markerBody!, 'background-color', 'cardNext::before'))
+    const cardFill = resolveColor(
+      declaredValue(ruleBody(cardModuleCss, 'card'), 'background-color', 'card')
+    )
+
+    expect(contrastRatio(parseHex(markerFill), parseHex(cardFill))).toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps the keyline on the 4px grid and out of the hit-test path', () => {
+    // width must stay a spacing token (DESIGN.md forbids off-scale px), and pointer-events:
+    // none is load-bearing: the pseudo-element hit-tests to .card, so without it the strip
+    // swallows clicks aimed at the .header disclosure button underneath.
+    expect(resolveColor(declaredValue(markerBody!, 'width', 'cardNext::before'))).toBe('4px')
+    expect(declaredValue(markerBody!, 'pointer-events', 'cardNext::before')).toBe('none')
+  })
+
+  it('still fails a text-grade demand (4.5:1) under a simulated 20% glare veil, honestly recording the marker limit', () => {
+    // ADR 0004's honest limit: under a ~20% ambient veil the blue compresses to ~1.92:1, so
+    // the marker is NOT the sole carrier - default expansion and the hidden label are its
+    // redundant cues. This pins that recorded limit so nobody later claims the keyline alone
+    // satisfies an outdoor contrast requirement.
+    const veil = (channel: number) => Math.round(channel + 0.2 * (255 - channel))
+    const veiled = (hex: string): [number, number, number, number] => {
+      const [r, g, b] = parseHex(hex)
+      return [veil(r), veil(g), veil(b), 1]
+    }
+    const cardFill = resolveColor(
+      declaredValue(ruleBody(cardModuleCss, 'card'), 'background-color', 'card')
+    )
+
+    const ratio = contrastRatio(veiled(token('--color-accent-blue')), veiled(cardFill))
+    expect(ratio).toBeLessThan(4.5)
+    expect(ratio).toBeGreaterThan(1)
+  })
+})
+
 describe('DESIGN.md lint', () => {
   it('reports zero errors and zero warnings', () => {
     // design.md lint exits 0 even with warnings, and CI does not run `lint:design` as its own

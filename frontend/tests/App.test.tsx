@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import type { OriginRoute } from '../src/types/transit'
+import cardStyles from '../src/components/TransitCard.module.css'
 
 /**
  * Guards the four mutually exclusive content branches of App: error / loading / empty / cards.
@@ -159,5 +160,157 @@ describe('App accessibility affordances', () => {
 
     expect(screen.getByRole('button', { name: '六本木一丁目' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: '東京' }).getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+/**
+ * The next-departure marker (issue #97, ADR 0004 D-3). The backend slices Jorudan's candidates
+ * with no sort and Jorudan ranks by route quality, so "card index 0" does NOT mean "soonest" -
+ * these tests pin the marker to the departure-time data, and the first test below is the one
+ * that kills a regression back to `index === 0` (which every position-based test would miss).
+ */
+describe('next-departure marker', () => {
+  const ROUTE_BODY = '■六本木一丁目\n｜東京メトロ南北線'
+
+  function transfer(summary: string) {
+    return { summary, route: ROUTE_BODY }
+  }
+
+  function origin(name: string, summaries: string[]): OriginRoute {
+    return { origin: name, destination: 'つつじヶ丘', transfers: summaries.map(transfer) }
+  }
+
+  /** The visible marker: cards carrying the .cardNext keyline modifier. */
+  function markedCards(container: HTMLElement): Element[] {
+    return [...container.querySelectorAll(`.${cardStyles.cardNext}`)]
+  }
+
+  /** The accessible marker: the visually-hidden text equivalent of the keyline. */
+  function markerLabels(): HTMLElement[] {
+    return screen.queryAllByText(/Next departure/)
+  }
+
+  it('marks the earliest departure, not the first card, when Jorudan ranks a later train first', () => {
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
+    })
+    const { container } = render(<App />)
+
+    const marked = markedCards(container)
+    expect(marked).toHaveLength(1)
+    expect(marked[0].textContent).toContain('18:49')
+    expect(marked[0].textContent).not.toContain('19:04')
+  })
+
+  it('marks exactly one card whenever at least one card renders', () => {
+    mockTransit({ originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)'])] })
+    const single = render(<App />)
+    expect(markedCards(single.container)).toHaveLength(1)
+    single.unmount()
+
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
+    })
+    const double = render(<App />)
+    expect(markedCards(double.container)).toHaveLength(1)
+    expect(markerLabels()).toHaveLength(1)
+  })
+
+  it('marks the first card on a departure-time tie', () => {
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', '18:49発 → 19:45着(56分)(0回)'])],
+    })
+    const { container } = render(<App />)
+
+    const marked = markedCards(container)
+    expect(marked).toHaveLength(1)
+    expect(marked[0].textContent).toContain('19:38')
+  })
+
+  it('marks nothing when any departure time failed to parse', () => {
+    // A string compare would put '--:--' before every digit and falsely win; the guard
+    // must drop the marker entirely instead.
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', 'no parsable times here'])],
+    })
+    const { container } = render(<App />)
+
+    expect(markedCards(container)).toHaveLength(0)
+    expect(markerLabels()).toHaveLength(0)
+  })
+
+  it('marks nothing when the times are more than 6 hours apart (suspected midnight wrap)', () => {
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['23:58発 → 0:45着(47分)(1回)', '0:12発 → 0:58着(46分)(1回)'])],
+    })
+    const { container } = render(<App />)
+
+    expect(markedCards(container)).toHaveLength(0)
+    expect(markerLabels()).toHaveLength(0)
+  })
+
+  it('marks nothing in the empty and error states', () => {
+    mockTransit()
+    const empty = render(<App />)
+    expect(markedCards(empty.container)).toHaveLength(0)
+    expect(markerLabels()).toHaveLength(0)
+    empty.unmount()
+
+    mockTransit({ error: 'HTTP error: 500' })
+    const errored = render(<App />)
+    expect(markedCards(errored.container)).toHaveLength(0)
+    expect(markerLabels()).toHaveLength(0)
+  })
+
+  it('gives the marker a text equivalent inside the marked card header', () => {
+    mockTransit({ originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)'])] })
+    render(<App />)
+
+    // The keyline is a pseudo-element, invisible to assistive tech; the hidden text is what
+    // reaches a screen reader, so it must live in the header button's accessible name.
+    const header = screen.getByRole('button', { name: /Next departure/ })
+    expect(header.textContent).toContain('18:49')
+    expect(header.querySelector('.visually-hidden')).not.toBeNull()
+  })
+
+  it('keeps the expanded card and the marker on the same train after a tab switch', () => {
+    // Tab A's marker sits at index 0, tab B's at index 1. React reuses component instances
+    // by key, so with a positional key (key={index}) tab A's expansion state would survive
+    // the switch on card 0 while the marker moves to card 1 - this test goes red if the
+    // key ever reverts to the index.
+    mockTransit({
+      originRoutes: [
+        origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', '19:04発 → 19:52着(48分)(1回)']),
+        origin('東京', ['19:10発 → 19:58着(48分)(1回)', '18:55発 → 19:40着(45分)(1回)']),
+      ],
+    })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: '東京' }))
+
+    const marked = screen.getByRole('button', { name: /Next departure/ })
+    expect(marked.textContent).toContain('18:55')
+    expect(marked.getAttribute('aria-expanded')).toBe('true')
+
+    // The unmarked card remounted collapsed - stale expansion did not leak across the tabs.
+    const headers = screen.getAllByRole('button').filter(button => button.hasAttribute('aria-expanded'))
+    expect(headers).toHaveLength(2)
+    const unmarked = headers.find(button => button !== marked)
+    expect(unmarked?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('expands the marked card by default and collapses the rest', () => {
+    mockTransit({
+      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
+    })
+    render(<App />)
+
+    const marked = screen.getByRole('button', { name: /Next departure/ })
+    expect(marked.textContent).toContain('18:49')
+    expect(marked.getAttribute('aria-expanded')).toBe('true')
+
+    const headers = screen.getAllByRole('button').filter(button => button.hasAttribute('aria-expanded'))
+    const unmarked = headers.find(button => button !== marked)
+    expect(unmarked?.getAttribute('aria-expanded')).toBe('false')
   })
 })
