@@ -10,6 +10,26 @@
   border-color: var(--border-elevated);
 }
 
+/* Next-departure keyline. A positioned pseudo-element, not a left border (which the corner
+ * radius would miter into a wedge, and which would shift this card's content 4px right and
+ * break the vertical alignment of the two cards' departure times) and not a shadow
+ * (DESIGN.md bans shadows). pointer-events: none because a pseudo-element hit-tests to
+ * .card, so the strip would otherwise swallow clicks aimed at the .header button. */
+.cardNext {
+  position: relative;
+}
+
+.cardNext::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--space-1);
+  background-color: var(--accent-blue);
+  pointer-events: none;
+}
+
 .header {
   display: flex;
   align-items: center;
