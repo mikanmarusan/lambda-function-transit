@@ -100,6 +100,8 @@ export function useApiStatus() {
   }, [])
 
   useEffect(() => {
+    // setStatus only fires after the awaited fetch settles, never synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkStatus()
     const interval = setInterval(checkStatus, 30000)
     return () => clearInterval(interval)
