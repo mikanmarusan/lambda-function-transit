@@ -18,7 +18,7 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Edge | CloudFront | Serves the React SPA from S3 and proxies `/api/*` to API Gateway. Protected by an AWS WAF Web ACL required by the CloudFront flat-rate pricing plan. |
 | Static hosting | S3 | Hosts the built Vite bundle. Sync target after `cd frontend && npm run build`. |
 | API | API Gateway (HTTP) | Routes `GET /api/transit` and `GET /api/status` to the Lambda function. |
-| Compute | AWS Lambda (Node.js 22, ESM) | Entry point: `src/index.mjs` → `handler(event, context)`. Region: `ap-northeast-1`. |
+| Compute | AWS Lambda (Node.js 24, ESM) | Entry point: `src/index.mjs` → `handler(event, context)`. Region: `ap-northeast-1`. |
 | Upstream | Jorudan | Public Japanese transit search. Requires a 6-hop, cross-subdomain cookie handshake to bypass bot detection (see §5 Data Flow). |
 
 ## 3. Layers & Modules

@@ -12,7 +12,7 @@ Fetches train transit information from [Jorudan](https://www.jorudan.co.jp/) (a 
 CloudFront + S3 (Frontend) → API Gateway → Lambda → Jorudan
 ```
 
-- **Backend Runtime**: Node.js 22 (ESM)
+- **Backend Runtime**: Node.js 24 (ESM)
 - **Frontend**: React 19 + TypeScript + Vite
 - **Entry point**: `src/index.mjs` → `handler(event, context)`
 - **API Gateway routes**: `GET /api/transit`, `GET /api/status`

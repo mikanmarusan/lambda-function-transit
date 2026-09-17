@@ -6,7 +6,7 @@ AWS Lambda function that fetches train transit information from [Jorudan](https:
 
 ## Tech Stack
 
-- Node.js 22 (ESM)
+- Node.js 24 (ESM)
 - AWS Lambda + API Gateway
 - AWS SAM (Serverless Application Model)
 - Docker (local development)
