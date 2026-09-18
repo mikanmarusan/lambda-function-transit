@@ -1,5 +1,5 @@
 # Development stage
-FROM node:22-slim AS development
+FROM node:24-slim AS development
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN npm ci
 # CMD is specified in docker-compose
 
 # Production build stage (for CI)
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /app
 COPY package*.json ./

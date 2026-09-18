@@ -1,6 +1,6 @@
 /**
  * AWS Lambda function to fetch transit information from Jorudan
- * Migrated from Python to Node.js 22
+ * Migrated from Python to Node.js 24
  */
 
 const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
