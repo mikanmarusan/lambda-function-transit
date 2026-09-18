@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: 99f35375a4982fe1c0dc3ee0f8e6e6b1f347d80d -->
+<!-- spec-synced-through: 7c81053e07c9bd99ff78f5c5869be18d86b18485 -->
 
 ## 1. Overview
 
