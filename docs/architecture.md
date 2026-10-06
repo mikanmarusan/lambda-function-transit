@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: ffc217059bebcba5605c4883af7477b03fbd10a0 -->
+<!-- spec-synced-through: aa04709be858a9d6fa2e5eb834bf0f07cb494967 -->
 
 ## 1. Overview
 
@@ -25,7 +25,11 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 
 | Module | Responsibility | Source path |
 | --- | --- | --- |
-| `handler(event, context)` | Entry point; normalizes the request path, orchestrates the cookie flow across origins, parses the results HTML, and returns the JSON response | `src/index.mjs` |
+| `handler(event, context)` | Entry point; normalizes the request path, orchestrates the cookie flow across origins, parses the results HTML, and returns the JSON response (legacy `routes` plus the structured `origins` field) | `src/index.mjs` |
+| `buildOriginResult()` | Builds one `origins[]` entry: classifies the origin as `ok` / `no_candidates` / `error`, parses its route blocks and ranks the candidates | `src/index.mjs` |
+| `parseCandidate()` | Parses one route block line by line into a structured candidate (summary, `stops[]`, `legs[]`) with ISO 8601 JST timestamps and midnight-crossing resolution | `src/parse.mjs` |
+| `rankCandidates()` / `pickFastestOrigin()` | Sort an origin's candidates by arrival, keep `MAX_CANDIDATES` (3), set `isFastest` / `isFewestTransfers`; name the origin whose best candidate arrives first | `src/parse.mjs` |
+| `describeLine()` / `lineCodeFor()` | Split a Jorudan line string into line name, train type, via and destination, and map the line name to a `lineCode` from the closed set of ADR 0008 D-1 | `src/lines.mjs` |
 | `buildSearchUrl()` / `buildDepartureParams()` | Build each origin's `nori.cgi` search URL per request, appending the JST departure date/time (`Dym`/`Ddd`/`Dhh`/`Dmn`) for "now + that origin's `walkMinutes`" (see §5 Jorudan Search Request) | `src/index.mjs` |
 | `performBotHandshake()` | Emulates the browser bot-check flow for each origin, with one `CookieJar` and one overall timeout budget per call | `src/index.mjs` |
 | `extractJsRedirect()` | Reads the (single- or double-quoted) `window.location.href` from the JS redirect stub, using a non-backtracking negated character class | `src/index.mjs` |
@@ -43,18 +47,75 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | App render-branch test | Vitest + Testing Library suite pinning the four content branches, the next-departure marker (earliest-not-first selection, its guards, the accessible text equivalent, identity-keyed expansion), their ARIA roles, and the accessibility affordances (`aria-live` wrapper, `aria-busy`, `aria-pressed`) (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
 | Frontend E2E suite | Playwright suite that stubs the API with `page.route` and pins the rendered accessibility / touch-target / motion / typography contract in a real browser (see §7) | `frontend/tests/e2e/transit.spec.ts`, `frontend/playwright.config.ts` |
 
+The SAM function is a Zip package of `./src` (`CodeUri`), so every backend module ships with it. The `production` stage of the root `Dockerfile` (the `api-prod` container) instead copies `src/index.mjs`, `src/parse.mjs`, and `src/lines.mjs` by name, so a new backend module must be added to that `COPY` line.
+
 ## 4. Data Model
 
-`GET /transit` or `GET /api/transit`:
+`GET /transit` or `GET /api/transit` (HTTP 200):
 
 ```json
 {
-  "transfers": [
-    ["18:49発 → 19:38着(49分)(1回)", "■六本木一丁目\n｜東京メトロ南北線..."],
-    ["18:55発 → 19:45着(50分)(2回)", "■六本木一丁目\n｜東京メトロ丸ノ内線..."]
+  "routes": [
+    {
+      "origin": "六本木一丁目",
+      "destination": "つつじヶ丘（東京）",
+      "transfers": [
+        ["20:45発 → 21:24着(39分)(2回)", "■六本木一丁目\n｜［地下鉄］東京メトロ南北線(浦和美園行)   3.1km   3・6号車\n◇四ッ谷 ...\n■つつじヶ丘（東京）    1・2番線着"]
+      ]
+    }
+  ],
+  "generatedAt": "2026-10-06T20:40:12+09:00",
+  "destination": "つつじヶ丘（東京）",
+  "fastestOrigin": "六本木一丁目",
+  "origins": [
+    {
+      "origin": "六本木一丁目",
+      "walkMinutes": 4,
+      "searchedFrom": "2026-10-06T20:44:00+09:00",
+      "status": "ok",
+      "candidates": [
+        {
+          "departureAt": "2026-10-06T20:45:00+09:00",
+          "arrivalAt": "2026-10-06T21:24:00+09:00",
+          "durationMinutes": 39,
+          "transferCount": 2,
+          "isFastest": true,
+          "isFewestTransfers": true,
+          "stops": [
+            { "station": "六本木一丁目", "arrivalPlatform": null, "departurePlatform": "1番線", "transferMinutes": null, "waitMinutes": null, "noAlight": false },
+            { "station": "四ッ谷", "arrivalPlatform": "3番線", "departurePlatform": "1番線", "transferMinutes": 4, "waitMinutes": 0, "noAlight": false },
+            { "station": "新宿", "arrivalPlatform": "1番線", "departurePlatform": "3番線", "transferMinutes": 6, "waitMinutes": 0, "noAlight": false },
+            { "station": "つつじヶ丘（東京）", "arrivalPlatform": "1・2番線", "departurePlatform": null, "transferMinutes": null, "waitMinutes": null, "noAlight": false }
+          ],
+          "legs": [
+            { "lineName": "東京メトロ南北線", "lineCode": "N", "trainType": null, "via": null, "destination": "浦和美園", "departAt": "2026-10-06T20:45:00+09:00", "arriveAt": "2026-10-06T20:51:00+09:00", "minutes": 6, "distanceKm": 3.1, "carPosition": "3・6号車" },
+            { "lineName": "東京メトロ丸ノ内線", "lineCode": "M", "trainType": null, "via": null, "destination": "荻窪", "departAt": "2026-10-06T20:55:00+09:00", "arriveAt": "2026-10-06T21:02:00+09:00", "minutes": 7, "distanceKm": 2.9, "carPosition": "前／1号車" },
+            { "lineName": "京王線", "lineCode": "KO", "trainType": "急行", "via": null, "destination": "京王八王子", "departAt": "2026-10-06T21:08:00+09:00", "arriveAt": "2026-10-06T21:24:00+09:00", "minutes": 16, "distanceKm": 12.5, "carPosition": "後方" }
+          ]
+        }
+      ]
+    },
+    { "origin": "神谷町", "walkMinutes": 7, "searchedFrom": "2026-10-06T20:47:00+09:00", "status": "error", "candidates": [] }
   ]
 }
 ```
+
+| Field | Contract |
+| --- | --- |
+| `routes` | **Legacy** (ADR 0006 D-3): unchanged shape; only origins whose legacy parse produced a transfer are listed; up to `LEGACY_MAX_CANDIDATES` (2) `[summary, route]` string tuples per origin, in Jorudan's order. Removed in a later release once the frontend reads `origins`. |
+| `generatedAt` | Request instant, ISO 8601 JST (`+09:00`), truncated to the second. |
+| `destination` | The fixed destination station. |
+| `fastestOrigin` | `string \| null` — the origin whose first (earliest-arriving) candidate arrives first; ties go to `JORUDAN_ORIGINS` order. `null` when no origin has a candidate. |
+| `origins[]` | One entry per `JORUDAN_ORIGINS` entry, in config order, always present. |
+| `origins[].searchedFrom` | JST now (truncated to the minute) + `walkMinutes`, ISO 8601 JST — the instant Jorudan was asked to depart from. |
+| `origins[].status` | `ok`: at least one candidate parsed. `no_candidates`: the results page held no route block. `error`: the fetch/handshake failed, the page had too few `<hr>` blocks, or route blocks existed but none parsed (see §5 HTML Parsing for the drop rules). Non-`ok` entries carry `candidates: []`. |
+| `origins[].candidates[]` | Up to `MAX_CANDIDATES` (3), sorted by `arrivalAt` (ties: fewer transfers first). `isFastest` marks the first candidate; `isFewestTransfers` marks one candidate with the fewest transfers (the earliest-arriving one on a tie). Both are scoped to the origin. |
+| `stops[]` / `legs[]` | `legs[i]` runs from `stops[i]` to `stops[i + 1]`, so `stops.length === legs.length + 1`. Platforms keep Jorudan's text (`1・2番線`, `59番のりば`); `transferMinutes`/`waitMinutes` come from `［乗換N分+待ちM分］` and are `null` on terminals; `noAlight` is `true` for `≪降車不要≫` (stay on the train). A station such as `新宿/新線新宿` (walking transfer between two stations) is kept as one string. |
+| `legs[].lineName` / `lineCode` | `lineName` is the line string with the `［地下鉄］`/`［私鉄］`/`［ＪＲ］`… category, `X経由` via, `(…行)` direction and trailing train type removed. `lineCode` is one of `N` `M` `H` `Z` `E` `S` `KO`, matched exactly after also dropping the `東京メトロ` operator prefix, or `null` (e.g. 京王井の頭線, 徒歩, buses). |
+| `legs[].trainType` / `via` / `destination` | `trainType` (e.g. `急行`, `各停`, `区間急行`) is stripped only when what remains still ends in `線`/`ライン`; `via` from `…線X経由`; `destination` from `(X行)`. Each is `null` when absent. |
+| `legs[].distanceKm` / `carPosition` | `distanceKm` is `null` when Jorudan prints `↓` (the train continues through); `carPosition` keeps Jorudan's text (`3・6号車`, `前／1号車`, `後方`) or is `null`. |
+
+The handler returns HTTP 500 `{ "error": "Failed to fetch transit information" }` only when every origin is `error` **and** the legacy path produced no `routes` entry, so the stricter structured parse alone never turns a response the legacy field could serve into a 500. An origin with `no_candidates` is not a failure: when no origin is `ok`, the response is still 200 with `fastestOrigin: null` (and `routes: []` when every origin is `no_candidates`).
 
 `GET /status` or `GET /api/status`:
 
@@ -89,7 +150,7 @@ On every `/transit` request the handler reads the current instant once and, for 
 | `Dhh` | Hour `0`–`23`, no padding | `12` |
 | `Dmn` | Minute `0`–`59`, no padding | `2` |
 
-The departure time is "JST now + `walkMinutes`", so Jorudan is asked for departures at or after the time the rider can reach that station. JST is computed explicitly with `Intl.DateTimeFormat` (`timeZone: 'Asia/Tokyo'`, `hourCycle: 'h23'`) because Lambda runs in UTC; adding the walk minutes to the instant before formatting carries day, month and year rollover (e.g. 2026-12-31 23:55 + 11 min → `Dym=202701&Ddd=1&Dhh=0&Dmn=6`). The parameters are built server-side from numbers only; nothing in the request feeds them. The response shape is unchanged.
+The departure time is "JST now + `walkMinutes`", so Jorudan is asked for departures at or after the time the rider can reach that station. JST is computed explicitly with `Intl.DateTimeFormat` (`timeZone: 'Asia/Tokyo'`, `hourCycle: 'h23'`) because Lambda runs in UTC; adding the walk minutes to the instant before formatting carries day, month and year rollover (e.g. 2026-12-31 23:55 + 11 min → `Dym=202701&Ddd=1&Dhh=0&Dmn=6`). The parameters are built server-side from numbers only; nothing in the request feeds them. The same instant, truncated to the minute, is reported per origin as `origins[].searchedFrom` and is the date base for that origin's parsed timestamps (§5 HTML Parsing).
 
 ### Jorudan Bot Detection — 6-Hop `jrd_uuid` Cookie Handshake
 
@@ -112,9 +173,11 @@ The transit results page is server-rendered HTML. The handler:
 - Normalizes line endings via `/\r?\n\r?\n/` so CRLF and LF responses parse identically.
 - Picks `blocks[TARGET_BLOCK_INDEX]` (index `2`) — the block that contains all candidate transit routes.
 - Calls `splitRoutes()`, which splits on the lookahead `(?=発着時間：)` to separate individual route candidates.
-- Returns up to `MAX_CANDIDATES` (`2`) routes.
+- **Legacy `routes`**: keeps the first `LEGACY_MAX_CANDIDATES` (`2`) blocks in Jorudan's order as `[getSummary(), getRoute()]` string tuples.
+- **Structured `origins`**: `parseCandidate()` (`src/parse.mjs`) reads every block line by line — `発着時間：HH:MM発 → HH:MM着` (any of the four summary/leg times may be parenthesised, as Jorudan prints walking times `(HH:MM)`), `所要時間：[H時間]M分`, `乗換回数：N回`, `■`/`◇` stop lines, and the `｜` rows under each stop: a line row starts a leg, the following `HH:MM-HH:MM［N分］` row gives its times, and fare (`178円`), arrow (`↓`) and empty rows are skipped. A block is dropped (fail closed) when a summary field is missing, a leg has no time row or no line name, a time is out of range (hour > 23 or minute > 59), `stops.length !== legs.length + 1`, or the resolved arrival minus departure differs from `所要時間` (so a summary arrival earlier than the last leg is never rolled to the next day). `rankCandidates()` then sorts the survivors by arrival and keeps `MAX_CANDIDATES` (`3`).
+- **Dates**: every `HH:MM` is resolved against the origin's `searchedFrom`. The departure is on the search day unless it is more than 12 hours earlier than the search time (then it is the next day, e.g. search 23:55, departure 00:01). Each later time that is earlier than the previous one is the next day, so a leg `23:58-00:05` arrives at `…T00:05:00+09:00` on the following date. JST is a fixed UTC+9 offset (no DST).
 
-Dynamic substrings used inside regular expressions are escaped via `escapeRegExp()` to prevent ReDoS.
+Dynamic substrings used inside regular expressions are escaped via `escapeRegExp()` to prevent ReDoS. The structured parser follows the ReDoS rules in §7 Guards.
 
 ### Frontend Render Branches
 
@@ -442,8 +505,8 @@ If any step fails with an `AccessDenied`, read the denied action/resource from t
 
 - **SSRF — `isAllowedUrl()`**: every hop's URL (and the plaintext `verify_uuid` body) is parsed with the WHATWG `URL` API and accepted only if it is `https:` and its exact `.hostname` is in the allowlist `{www.jorudan.co.jp, jid.jorudan.co.jp}` (with no embedded credentials). This rejects off-allowlist hosts, look-alike suffixes (`jorudan.co.jp.evil.com`), the bare apex, TLS downgrades (`http://169.254.169.254/...`), protocol-relative `//host`, and `data:`/`javascript:`/`file:`/`ftp:` schemes.
 - **Cookies — Domain-attribute scoping**: a `CookieJar` (built on `Headers.getSetCookie()`) honours each `Set-Cookie` `Domain` — host-only when absent, shared only when `Domain=.jorudan.co.jp` — so no jid-scoped cookie leaks to `www` and vice versa.
-- **Timeout budget**: each hop is capped at `PER_HOP_TIMEOUT_MS` (2.5s) and the whole per-origin chain at `OVERALL_BUDGET_MS` (7s), via `AbortSignal.timeout(min(perHop, remaining))`, keeping the 6-hop chain inside the Lambda `Timeout` (15s). The 3 origins run concurrently via `Promise.allSettled`, so one origin failing still returns the others (HTTP 200); all failing returns 500.
-- **ReDoS**: `extractJsRedirect()` uses a non-backtracking negated character class (`[^'"]+`), and dynamic substrings used in route-parsing regexes are escaped via `escapeRegExp()`.
+- **Timeout budget**: each hop is capped at `PER_HOP_TIMEOUT_MS` (2.5s) and the whole per-origin chain at `OVERALL_BUDGET_MS` (7s), via `AbortSignal.timeout(min(perHop, remaining))`, keeping the 6-hop chain inside the Lambda `Timeout` (15s). The 3 origins run concurrently via `Promise.allSettled`, so one origin failing still returns the others (HTTP 200, the failed origin reported as `status: "error"` in `origins`); the handler returns 500 only when every origin is `error` and the legacy `routes` is empty (see §4 Data Model).
+- **ReDoS**: `extractJsRedirect()` uses a non-backtracking negated character class (`[^'"]+`), and dynamic substrings used in route-parsing regexes are escaped via `escapeRegExp()`. `src/parse.mjs` and `src/lines.mjs` parse line by line, skip any line longer than 200 characters (and `describeLine()` refuses input over 120), and use only literal-anchored regexes with bounded quantifiers (`\d{1,3}`, `[^［］\n]{1,10}`, ` {2,80}`). `tests/parse.test.mjs` asserts adversarial inputs return within 250 ms at two scales: 100,000-character lines (which exercise the length cap) and worst-case lines that fit under the caps, repeated 500 times (which exercise the regexes themselves).
 
 ### Design Token Integrity
 
@@ -489,7 +552,7 @@ CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but *
 
 ### Observability
 
-The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable.
+The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable. Every origin whose `origins[].status` is not `ok` emits one `level: "warn"` `Partial origin fetch failure` line carrying `origin`, `status`, and `errorMessage` (the rejection message, or a fixed reason for an unparseable or route-less page).
 
 ## 8. Glossary
 
@@ -498,7 +561,9 @@ The handler emits structured JSON logs to CloudWatch so each step of the cookie 
 - **`nori.cgi`** — Jorudan's transit search/results endpoint on `www.jorudan.co.jp`.
 - **`jid.jorudan.co.jp`** — the separate subdomain that hosts the `jrd_uuid` UUID-cookie handshake (`set_uuid.cgi`, `verify_uuid.cgi`).
 - **`TARGET_BLOCK_INDEX`** — index `2`, the HTML block (between `<hr>` separators) that contains all candidate transit routes.
-- **`MAX_CANDIDATES`** — the maximum number of route candidates returned (`2`).
+- **`MAX_CANDIDATES`** — the maximum number of structured candidates per origin in `origins` (`3`).
+- **`LEGACY_MAX_CANDIDATES`** — the maximum number of `[summary, route]` tuples per origin in the legacy `routes` field (`2`).
+- **`lineCode`** — a leg's line identity from the closed set `N` (南北線), `M` (丸ノ内線), `H` (日比谷線), `Z` (半蔵門線), `E` (都営大江戸線), `S` (都営新宿線), `KO` (京王線 / 京王新線), or `null` (ADR 0008 D-1).
 - **WAF Web ACL** — the AWS WAF resource that must stay attached to the CloudFront distribution under its flat-rate pricing plan; ARN held in `WEB_ACL_ARN_PROD`.
 - **OAC** — CloudFront Origin Access Control, fronting the S3 origin.
 - **`gh-actions-deploy-prod`** — the GitHub OIDC IAM role assumed by the `Deploy to Production` workflow; backed by the least-privilege `gh-actions-deploy-prod-leastpriv` policy.

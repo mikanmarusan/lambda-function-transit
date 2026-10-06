@@ -25,9 +25,12 @@ For the system overview and AWS topology diagram, start at the [`docs/architectu
 | Area | Path | Description |
 |------|------|-------------|
 | Backend | `src/index.mjs` | Lambda handler with cookie flow |
+| Backend | `src/parse.mjs` | Structured route parsing for the `origins` field |
+| Backend | `src/lines.mjs` | Line name to `lineCode` table (ADR 0008) |
 | Backend | `src/dev-server.mjs` | Local development HTTP server |
 | Backend | `src/lambda_function.py` | Original Python implementation (reference only) |
 | Tests | `tests/handler.test.mjs` | Backend unit tests |
+| Tests | `tests/parse.test.mjs` | Route parser unit tests |
 | Tests | `tests/e2e.test.mjs` | Backend E2E tests |
 | Infra | `template.yml` | SAM template (Lambda + CloudFront + S3 + WAF wiring) |
 | Infra | `samconfig.toml` | SAM deployment configuration |
@@ -156,3 +159,5 @@ The Web ACL itself is **not** managed by this stack (it was created by the Cloud
 - Before a new ADR introduces a field, token, or contract, search the Accepted ADRs for an earlier decision that already names it, and state whether the new record refines, narrows, or supersedes that decision. Presenting an already-decided field as new leaves two records that each read as the origin.
 - When a doc says a change passes the test gates with no new exception, open each gate's allowlists and list every artifact the change makes the generator emit (per-level siblings included) before writing the claim; name each allowlist entry the implementing change must add instead of asserting none.
 - When a decision maps scraped free-text values onto a closed set, record the normalization step and the exact-match rule, and name one real out-of-set value that a loose substring match would wrongly capture, so the implementing issue cannot ship a match that silently breaks the null contract.
+- When a stricter parser ships beside a lenient legacy path in the same response, derive the error status from the legacy output as well, so the new parser failing closed on upstream drift can never turn a response the legacy field could still serve into an error for clients that read only the legacy field.
+- When a parser skips over-long input before running its regexes, give its ReDoS tests worst-case lines that fit under that cap as well as huge ones. An over-cap input only exercises the length check and stays green even if a regex turns catastrophic; assert each fixture's length is under the cap so it cannot drift into the skipped range.

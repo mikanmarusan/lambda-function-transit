@@ -59,32 +59,40 @@ sam deploy
 
 **Endpoint**: `GET /api/transit` (CloudFront) or `GET /transit` (dev server)
 
-**Response** (up to 2 transit candidates):
+**Response** (abridged; the full contract is in [`docs/architecture.md`](./docs/architecture.md) §4 Data Model):
 ```json
 {
-  "transfers": [
-    [
-      "18:49発 → 19:38着(49分)(1回)",
-      "■六本木一丁目\n｜東京メトロ南北線...\n■つつじヶ丘（東京）"
-    ],
-    [
-      "18:55発 → 19:45着(50分)(2回)",
-      "■六本木一丁目\n｜東京メトロ丸ノ内線...\n■つつじヶ丘（東京）"
-    ]
+  "routes": [
+    {
+      "origin": "六本木一丁目",
+      "destination": "つつじヶ丘（東京）",
+      "transfers": [["20:45発 → 21:24着(39分)(2回)", "■六本木一丁目\n｜［地下鉄］東京メトロ南北線...\n■つつじヶ丘（東京）"]]
+    }
+  ],
+  "generatedAt": "2026-10-06T20:40:12+09:00",
+  "destination": "つつじヶ丘（東京）",
+  "fastestOrigin": "六本木一丁目",
+  "origins": [
+    { "origin": "六本木一丁目", "walkMinutes": 4, "status": "ok", "searchedFrom": "2026-10-06T20:44:00+09:00", "candidates": ["..."] }
   ]
 }
 ```
+
+`routes` (up to 2 candidates per origin, Jorudan order) is the legacy field kept until the frontend reads `origins` (up to 3 candidates per origin, sorted by arrival).
 
 ## Project Structure
 
 ```
 src/
 ├── index.mjs          # Lambda handler
+├── parse.mjs          # Structured route parsing (origins field)
+├── lines.mjs          # Line name -> lineCode table
 ├── dev-server.mjs     # Development server
 ├── package.json       # Dependencies
 └── lambda_function.py # Original Python (reference)
 tests/
 ├── handler.test.mjs   # Unit tests
+├── parse.test.mjs     # Route parser unit tests
 └── e2e.test.mjs       # E2E tests
 frontend/              # React frontend
 ├── src/               # Source code

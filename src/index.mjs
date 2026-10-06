@@ -3,6 +3,8 @@
  * Migrated from Python to Node.js 24
  */
 
+import { parseCandidate, rankCandidates, pickFastestOrigin, toJstIso } from './parse.mjs';
+
 const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
 const JORUDAN_URL_PREFIX = `${JORUDAN_BASE_URL}/norikae/cgi/nori.cgi?rf=top&eok1=R-&eok2=R-&pg=0&eki1=`;
 const JORUDAN_URL_SUFFIX = '&Cmap1=&eki2=%E3%81%A4%E3%81%A4%E3%81%98%E3%83%B6%E4%B8%98%EF%BC%88%E6%9D%B1%E4%BA%AC%EF%BC%89&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t';
@@ -29,7 +31,8 @@ const OVERALL_BUDGET_MS = 7000;    // total budget for one origin's full handsha
 const ALLOWED_HOSTS = new Set(['www.jorudan.co.jp', 'jid.jorudan.co.jp']);
 const MIN_EXPECTED_BLOCKS = 3;
 const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
-const MAX_CANDIDATES = 2;  // Maximum number of transit candidates to return
+const LEGACY_MAX_CANDIDATES = 2;  // Candidates per origin in the legacy `routes` field (unchanged)
+const MAX_CANDIDATES = 3;  // Candidates per origin in the structured `origins` field
 
 /**
  * Build Jorudan's departure date/time query parameters for "now + walkMinutes" in JST.
@@ -411,6 +414,38 @@ function normalizePath(path) {
 }
 
 /**
+ * Split a results page into its route blocks.
+ * @param {string} body - Transit results HTML
+ * @returns {string[]} Route blocks (empty when Jorudan found no route)
+ */
+function extractRouteBlocks(body) {
+  const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
+  if (blocks.length < MIN_EXPECTED_BLOCKS) {
+    throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);
+  }
+  return splitRoutes(blocks[TARGET_BLOCK_INDEX]);
+}
+
+/**
+ * Build one entry of the structured `origins` field.
+ * `error`: the fetch failed, or route blocks exist but none parsed.
+ * `no_candidates`: the results page held no route block.
+ * @param {{ origin: string, walkMinutes: number }} config - Origin config
+ * @param {PromiseSettledResult<string[]>} result - Route blocks for the origin
+ * @param {Date} now - Request instant
+ * @returns {Object} Origin result
+ */
+function buildOriginResult({ origin, walkMinutes }, result, now) {
+  const searchStart = new Date(Math.floor(now.getTime() / 60_000) * 60_000 + walkMinutes * 60_000);
+  const base = { origin, walkMinutes, searchedFrom: toJstIso(searchStart.getTime()) };
+  if (result.status !== 'fulfilled') return { ...base, status: 'error', candidates: [] };
+  if (result.value.length === 0) return { ...base, status: 'no_candidates', candidates: [] };
+  const parsed = result.value.map(block => parseCandidate(block, searchStart)).filter(Boolean);
+  if (parsed.length === 0) return { ...base, status: 'error', candidates: [] };
+  return { ...base, status: 'ok', candidates: rankCandidates(parsed, MAX_CANDIDATES) };
+}
+
+/**
  * Lambda handler function
  * @param {Object} event - Lambda event object
  * @param {Object} _context - Lambda context object
@@ -429,48 +464,52 @@ export async function handler(event, _context) {
     const now = new Date();
     const results = await Promise.allSettled(
       JORUDAN_ORIGINS.map(({ origin, walkMinutes }) =>
-        performBotHandshake(buildSearchUrl(origin, walkMinutes, now)).then(body => {
-          const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
-          if (blocks.length < MIN_EXPECTED_BLOCKS) {
-            throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);
-          }
-          const targetBlock = blocks[TARGET_BLOCK_INDEX];
-          const routeBlocks = splitRoutes(targetBlock);
-          if (routeBlocks.length === 0) {
-            throw new Error('No transit routes found in response');
-          }
-          const transfers = routeBlocks
-            .slice(0, MAX_CANDIDATES)
-            .map(route => [getSummary(route), getRoute(route)])
-            .filter(([summary, route]) => summary !== '()()' && route.trim());
-          if (transfers.length === 0) {
-            throw new Error('No valid transit routes found in response');
-          }
-          return { origin, destination: JORUDAN_DESTINATION, transfers };
-        })
+        performBotHandshake(buildSearchUrl(origin, walkMinutes, now)).then(extractRouteBlocks)
       )
     );
 
-    const routes = results
-      .filter(r => r.status === 'fulfilled')
-      .map(r => r.value);
-
+    // Legacy `routes` field: same shape and candidate rules as before `origins` existed.
+    const routes = [];
     results.forEach((r, i) => {
-      if (r.status === 'rejected') {
+      if (r.status !== 'fulfilled') return;
+      const transfers = r.value
+        .slice(0, LEGACY_MAX_CANDIDATES)
+        .map(route => [getSummary(route), getRoute(route)])
+        .filter(([summary, route]) => summary !== '()()' && route.trim());
+      if (transfers.length > 0) {
+        routes.push({ origin: JORUDAN_ORIGINS[i].origin, destination: JORUDAN_DESTINATION, transfers });
+      }
+    });
+
+    const origins = JORUDAN_ORIGINS.map((config, i) => buildOriginResult(config, results[i], now));
+
+    origins.forEach((o, i) => {
+      if (o.status !== 'ok') {
         console.error(JSON.stringify({
           level: 'warn',
           message: 'Partial origin fetch failure',
-          origin: JORUDAN_ORIGINS[i].origin,
-          errorMessage: r.reason?.message,
+          origin: o.origin,
+          status: o.status,
+          errorMessage: results[i].status === 'rejected'
+            ? results[i].reason?.message
+            : (o.status === 'error' ? 'No route block could be parsed' : 'No transit routes found in response'),
         }));
       }
     });
 
-    if (routes.length === 0) {
+    // The legacy field keeps its own failure semantics: a stricter structured
+    // parse alone never turns a response the legacy path could serve into a 500.
+    if (routes.length === 0 && origins.every(o => o.status === 'error')) {
       throw new Error('All origin fetches failed');
     }
 
-    return createJsonResponse(200, { routes });
+    return createJsonResponse(200, {
+      routes,
+      generatedAt: toJstIso(Math.floor(now.getTime() / 1000) * 1000),
+      destination: JORUDAN_DESTINATION,
+      fastestOrigin: pickFastestOrigin(origins),
+      origins,
+    });
   } catch (error) {
     console.error(JSON.stringify({
       level: 'error',

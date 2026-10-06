@@ -4,13 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { getSummary, getRoute, splitRoutes, handler, extractJsRedirect, isAllowedUrl, buildDepartureParams, buildSearchUrl } from '../src/index.mjs';
 
 // Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
-const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
+const mockBlock = `発着時間：06:30発 → 08:45着\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
 
 // Second mock block for multiple candidates testing
-const mockBlock2 = `発着時間：07:00～09:00\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n■新宿    1番線発\r\n｜ 　京王線(京王八王子行)   12.5km\r\n｜07:00-07:20［20分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
+const mockBlock2 = `発着時間：07:00発 → 09:00着\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n■新宿    1番線発\r\n｜ 　京王線(京王八王子行)   12.5km\r\n｜07:00-07:20［20分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
 
 // Third mock block for MAX_CANDIDATES testing
-const mockBlock3 = `発着時間：08:00～10:00\r\n所要時間：2時間\r\n乗換回数：0回\r\n\r\n■渋谷    1番線発\r\n｜ 　京王井の頭線(吉祥寺行)   4.9km\r\n｜08:00-08:10［10分］\r\n■明大前    1番線着`;
+const mockBlock3 = `発着時間：08:00発 → 10:00着\r\n所要時間：2時間\r\n乗換回数：0回\r\n\r\n■渋谷    1番線発\r\n｜ 　京王井の頭線(吉祥寺行)   4.9km\r\n｜08:00-08:10［10分］\r\n■明大前    1番線着`;
 
 // Combined blocks for multiple candidates
 const mockMultipleBlocks = `${mockBlock}${mockBlock2}`;
@@ -64,7 +64,7 @@ function createMockResponse(html) {
 describe('getSummary', () => {
   it('should extract arrival and departure time', () => {
     const summary = getSummary(mockBlock);
-    assert.ok(summary.includes('06:30～08:45'), 'Should contain arrival/departure time');
+    assert.ok(summary.includes('06:30発 → 08:45着'), 'Should contain arrival/departure time');
   });
 
   it('should extract required time', () => {
@@ -141,7 +141,7 @@ describe('splitRoutes', () => {
   it('should return array for single route', () => {
     const routes = splitRoutes(mockBlock);
     assert.strictEqual(routes.length, 1, 'Should return 1 route');
-    assert.ok(routes[0].includes('06:30～08:45'), 'Should contain first route data');
+    assert.ok(routes[0].includes('06:30発 → 08:45着'), 'Should contain first route data');
   });
 
   it('should return empty array for empty string', () => {
@@ -427,7 +427,7 @@ describe('handler', () => {
     });
   });
 
-  it('should limit candidates to MAX_CANDIDATES (2) per origin', async () => {
+  it('should limit legacy routes to LEGACY_MAX_CANDIDATES (2) per origin', async () => {
     await runWithMockedFetch(createMockResponse(buildHtml(mockThreeBlocks)), async () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
@@ -436,12 +436,15 @@ describe('handler', () => {
     });
   });
 
-  it('should return error when no transit routes found', async () => {
+  it('returns 200 with no_candidates origins and fastestOrigin null when no route is found', async () => {
     await runWithMockedFetch(createMockResponse(buildHtml('no routes here')), async () => {
       const result = await handler({}, {});
-      assert.strictEqual(result.statusCode, 500, 'Should return status 500 when no routes found');
+      assert.strictEqual(result.statusCode, 200, 'a page with no route is not a failure');
       const body = JSON.parse(result.body);
-      assert.ok(body.error, 'Should have error in response');
+      assert.deepStrictEqual(body.routes, [], 'legacy routes keeps its shape with no origin');
+      assert.strictEqual(body.fastestOrigin, null);
+      assert.deepStrictEqual(body.origins.map(o => o.status), ['no_candidates', 'no_candidates', 'no_candidates']);
+      for (const o of body.origins) assert.deepStrictEqual(o.candidates, []);
     });
   });
 
@@ -481,6 +484,140 @@ describe('handler', () => {
       assert.strictEqual(body.routes[1].origin, '神谷町');
       assert.strictEqual(body.routes[2].origin, '麻布十番');
     });
+  });
+});
+
+describe('handler — structured origins field', () => {
+  const KAMIYACHO_EKI1 = '%E7%A5%9E%E8%B0%B7%E7%94%BA';
+  // Fourth block, arriving last, to prove the MAX_CANDIDATES (3) cap.
+  const mockBlock4 = `発着時間：08:10発 → 11:00着\r\n所要時間：2時間50分\r\n乗換回数：0回\r\n\r\n■新宿    3番線発\r\n｜ 　［私鉄］京王線各停(高幡不動行)   12.5km   後方\r\n｜ 　08:10-11:00［170分］\r\n■つつじヶ丘（東京）    1・2番線着`;
+  // Jorudan order is not arrival order: 10:00, 09:00, 11:00, 08:45.
+  const unsortedHtml = `block0<hr size="1" color="black" />block1<hr size="1" color="black" />${mockBlock3}${mockBlock2}${mockBlock4}${mockBlock}<hr size="1" color="black" />block3`;
+  // Arrives 07:30, earlier than any candidate of unsortedHtml.
+  const earlyBlock = `発着時間：06:40発 → 07:30着\r\n所要時間：50分\r\n乗換回数：1回\r\n\r\n■神谷町    1番線発\r\n｜ 　［地下鉄］東京メトロ日比谷線(中目黒行)   1.5km   後／1号車\r\n｜ 　06:40-06:43［3分］\r\n◇六本木    1番線着・2番線発 ［乗換6分+待ち2分］\r\n｜ 　［地下鉄］都営大江戸線都庁前経由(光が丘行)   4.6km   3・8号車\r\n｜ 　06:51-07:30［39分］\r\n■つつじヶ丘（東京）    1・2番線着`;
+  const earlyHtml = `block0<hr size="1" color="black" />block1<hr size="1" color="black" />${earlyBlock}<hr size="1" color="black" />block3`;
+
+  const buildHtmlFrom = (blocks) => `block0<hr size="1" color="black" />block1<hr size="1" color="black" />${blocks}<hr size="1" color="black" />`;
+
+  async function runAt(iso, fetchFn) {
+    mock.timers.enable({ apis: ['Date'], now: new Date(iso) });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock.fn(fetchFn);
+    try {
+      const result = await handler({ path: '/api/transit' }, {});
+      return { result, body: JSON.parse(result.body) };
+    } finally {
+      globalThis.fetch = originalFetch;
+      mock.timers.reset();
+    }
+  }
+
+  it('adds generatedAt, destination, fastestOrigin and per-origin results next to routes', async () => {
+    const { result, body } = await runAt('2026-10-01T06:20:30+09:00', async () => createMockResponse(unsortedHtml));
+    assert.strictEqual(result.statusCode, 200);
+    assert.ok(Array.isArray(body.routes), 'legacy routes must stay');
+    assert.strictEqual(body.generatedAt, '2026-10-01T06:20:30+09:00');
+    assert.strictEqual(body.destination, 'つつじヶ丘（東京）');
+    assert.strictEqual(body.fastestOrigin, '六本木一丁目', 'ties go to config order');
+    assert.deepStrictEqual(
+      body.origins.map(o => [o.origin, o.walkMinutes, o.status, o.searchedFrom]),
+      [
+        ['六本木一丁目', 4, 'ok', '2026-10-01T06:24:00+09:00'],
+        ['神谷町', 7, 'ok', '2026-10-01T06:27:00+09:00'],
+        ['麻布十番', 11, 'ok', '2026-10-01T06:31:00+09:00'],
+      ],
+    );
+  });
+
+  it('keeps at most 3 candidates per origin, sorted by arrival, with isFastest / isFewestTransfers', async () => {
+    const { body } = await runAt('2026-10-01T06:20:00+09:00', async () => createMockResponse(unsortedHtml));
+    const { candidates } = body.origins[0];
+    assert.deepStrictEqual(candidates.map(c => c.arrivalAt), [
+      '2026-10-01T08:45:00+09:00',
+      '2026-10-01T09:00:00+09:00',
+      '2026-10-01T10:00:00+09:00',
+    ]);
+    assert.deepStrictEqual(candidates.map(c => c.isFastest), [true, false, false]);
+    assert.deepStrictEqual(candidates.map(c => c.isFewestTransfers), [false, false, true]);
+    const first = candidates[0];
+    assert.strictEqual(first.departureAt, '2026-10-01T06:30:00+09:00');
+    assert.strictEqual(first.durationMinutes, 135);
+    assert.strictEqual(first.transferCount, 2);
+    assert.strictEqual(first.stops.length, first.legs.length + 1);
+    assert.deepStrictEqual(
+      first.legs.map(l => [l.lineCode, l.departAt, l.arriveAt]),
+      [
+        ['N', '2026-10-01T06:30:00+09:00', '2026-10-01T06:36:00+09:00'],
+        ['Z', '2026-10-01T06:44:00+09:00', '2026-10-01T06:53:00+09:00'],
+        [null, '2026-10-01T07:03:00+09:00', '2026-10-01T07:20:00+09:00'],
+      ],
+    );
+    // The legacy field is unchanged: Jorudan order, at most 2.
+    assert.deepStrictEqual(body.routes[0].transfers.map(([summary]) => summary.slice(0, 5)), ['08:00', '07:00']);
+  });
+
+  it('names the origin whose best candidate arrives first as fastestOrigin', async () => {
+    const { body } = await runAt('2026-10-01T06:20:00+09:00', async (url) =>
+      createMockResponse(url.includes(`eki1=${KAMIYACHO_EKI1}&`) ? earlyHtml : unsortedHtml));
+    assert.strictEqual(body.fastestOrigin, '神谷町');
+    const kamiyacho = body.origins.find(o => o.origin === '神谷町');
+    assert.deepStrictEqual(kamiyacho.candidates[0].legs.map(l => [l.lineCode, l.via]), [['H', null], ['E', '都庁前']]);
+  });
+
+  it('marks an origin whose fetch fails as error and still answers 200', async () => {
+    const { result, body } = await runAt('2026-10-01T06:20:00+09:00', async (url) =>
+      (url.includes(`eki1=${KAMIYACHO_EKI1}&`) ? createMockResponse('only one block') : createMockResponse(unsortedHtml)));
+    assert.strictEqual(result.statusCode, 200);
+    const kamiyacho = body.origins.find(o => o.origin === '神谷町');
+    assert.strictEqual(kamiyacho.status, 'error');
+    assert.deepStrictEqual(kamiyacho.candidates, []);
+    assert.deepStrictEqual(body.origins.map(o => o.status), ['ok', 'error', 'ok']);
+    assert.strictEqual(body.routes.length, 2);
+  });
+
+  it('marks an origin whose route blocks all fail to parse as error', async () => {
+    const malformedHtml = 'block0<hr size="1" color="black" />block1<hr size="1" color="black" />発着時間：\r\n\r\n<hr size="1" color="black" />';
+    const { body } = await runAt('2026-10-01T06:20:00+09:00', async (url) =>
+      createMockResponse(url.includes(`eki1=${KAMIYACHO_EKI1}&`) ? malformedHtml : unsortedHtml));
+    assert.strictEqual(body.origins.find(o => o.origin === '神谷町').status, 'error');
+  });
+
+  it('returns fastestOrigin null when origins are only no_candidates or error', async () => {
+    const { result, body } = await runAt('2026-10-01T06:20:00+09:00', async (url) =>
+      createMockResponse(url.includes(`eki1=${KAMIYACHO_EKI1}&`)
+        ? 'block0<hr size="1" color="black" />block1<hr size="1" color="black" />no routes<hr size="1" color="black" />'
+        : 'only one block'));
+    assert.strictEqual(result.statusCode, 200);
+    assert.deepStrictEqual(body.origins.map(o => o.status), ['error', 'no_candidates', 'error']);
+    assert.strictEqual(body.fastestOrigin, null);
+  });
+
+  it('keeps answering 200 with legacy routes when only the structured parse fails everywhere', async () => {
+    // Jorudan markup drift the strict parser rejects (a summary whose duration
+    // disagrees with its times) must not take down the legacy field.
+    const driftedHtml = buildHtmlFrom(mockBlock.replace('所要時間：2時間15分', '所要時間：3時間'));
+    const { result, body } = await runAt('2026-10-01T06:20:00+09:00', async () => createMockResponse(driftedHtml));
+    assert.strictEqual(result.statusCode, 200);
+    assert.strictEqual(body.routes.length, 3);
+    assert.deepStrictEqual(body.origins.map(o => o.status), ['error', 'error', 'error']);
+    assert.strictEqual(body.fastestOrigin, null);
+  });
+
+  it('returns 500 when every origin is error', async () => {
+    const { result, body } = await runAt('2026-10-01T06:20:00+09:00', async () => createMockResponse('only one block'));
+    assert.strictEqual(result.statusCode, 500);
+    assert.ok(body.error);
+    assert.strictEqual(body.origins, undefined);
+  });
+
+  it('resolves a leg that crosses midnight to a next-day arriveAt', async () => {
+    const lateBlock = `発着時間：23:50発 → 00:20着\r\n所要時間：30分\r\n乗換回数：0回\r\n\r\n■六本木一丁目    1番線発 \r\n｜ 　［地下鉄］東京メトロ南北線(浦和美園行)   3.1km   3・6号車\r\n｜ 　23:50-00:20［30分］\r\n■つつじヶ丘（東京）    1・2番線着 `;
+    const lateHtml = `block0<hr size="1" color="black" />block1<hr size="1" color="black" />${lateBlock}<hr size="1" color="black" />`;
+    const { body } = await runAt('2026-10-31T23:40:00+09:00', async () => createMockResponse(lateHtml));
+    const leg = body.origins[0].candidates[0].legs[0];
+    assert.strictEqual(leg.departAt, '2026-10-31T23:50:00+09:00');
+    assert.strictEqual(leg.arriveAt, '2026-11-01T00:20:00+09:00');
+    assert.strictEqual(body.origins[0].candidates[0].arrivalAt, '2026-11-01T00:20:00+09:00');
   });
 });
 
@@ -630,6 +767,10 @@ describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router 
       const data = JSON.parse(result.body);
       assert.strictEqual(data.routes.length, 2, 'two origins should still succeed');
       assert.ok(!data.routes.some(r => r.origin === '六本木一丁目'), 'failed origin should be absent');
+      const failed = data.origins.find(o => o.origin === '六本木一丁目');
+      assert.strictEqual(failed.status, 'error', 'failed origin is reported as error in origins');
+      assert.deepStrictEqual(failed.candidates, []);
+      assert.strictEqual(data.fastestOrigin, '神谷町');
     });
   });
 
