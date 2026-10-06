@@ -1,0 +1,70 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* White circle + letter code; the ring colour comes from one allow-listed .line* class below
+   (ADR 0008 D-1/D-2). The fill and the dark code text are the line-independent part. */
+.code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--space-5);
+  height: var(--space-5);
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background-color: var(--bg-inverted);
+  color: var(--text-inverted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.lineN {
+  border-color: var(--line-n);
+}
+
+.lineM {
+  border-color: var(--line-m);
+}
+
+.lineH {
+  border-color: var(--line-h);
+}
+
+.lineZ {
+  border-color: var(--line-z);
+}
+
+.lineE {
+  border-color: var(--line-e);
+}
+
+.lineS {
+  border-color: var(--line-s);
+}
+
+.lineKo {
+  border-color: var(--line-ko);
+}
+
+/* CJK label: kinsoku on, no letter-spacing, never break-all / break-word (Typography). */
+.name {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+/* A leg whose lineCode is null: the name alone, outlined in the neutral line colour (no circle). */
+.nameNeutral {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line-neutral);
+  border-radius: var(--radius-sm);
+}

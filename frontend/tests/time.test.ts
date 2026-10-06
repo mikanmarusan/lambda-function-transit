@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { STALE_AFTER_MS, formatClockTime, isStale, minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
+import { STALE_AFTER_MS, formatClockTime, isStale, leaveCountdown, minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
 
 const DEPARTURE = '2026-10-06T20:45:00+09:00'
 const WALK = 4
@@ -49,6 +49,19 @@ describe('minutesUntilLeave', () => {
   it('returns null for a non-finite walk time or now', () => {
     expect(minutesUntilLeave(DEPARTURE, NaN, LEAVE_AT)).toBeNull()
     expect(minutesUntilLeave(DEPARTURE, WALK, Infinity)).toBeNull()
+  })
+})
+
+describe('leaveCountdown (issue #123)', () => {
+  it.each([
+    [10, 'go', 'あと10分で出る'],
+    [2, 'go', 'あと2分で出る'],
+    [1, 'now', '今すぐ出発'],
+    [0, 'now', '今すぐ出発'],
+    [-1, 'missed', '間に合いません'],
+    [-30, 'missed', '間に合いません'],
+  ] as const)('%i minute(s) -> %s %s', (minutes, tone, label) => {
+    expect(leaveCountdown(minutes)).toEqual({ tone, label })
   })
 })
 

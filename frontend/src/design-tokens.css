@@ -25,7 +25,15 @@
   --color-accent-amber: #f59e0b;
   --color-accent-amber-tint: #f59e0b1a;
   --color-accent-amber-tint-border: #f59e0b33;
+  --color-line-n: #00ac9b;
+  --color-line-m: #f62e36;
+  --color-line-h: #b5b5ac;
+  --color-line-z: #8f76d6;
+  --color-line-e: #cf3e96;
+  --color-line-s: #6cbb5a;
+  --color-line-ko: #dd0077;
   --color-primary: #3b82f6;
+  --color-line-neutral: #8a8a8a;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -33,9 +41,11 @@
   --text-lg: 16px;
   --text-xl: 18px;
   --text-2xl: 20px;
+  --text-3xl: 28px;
   --tracking-lg: -0.02em;
   --tracking-xl: -0.02em;
   --tracking-2xl: -0.02em;
+  --tracking-3xl: -0.02em;
   --font-weight-xs: 500;
   --font-weight-sm: 500;
   --font-weight-base: 500;
@@ -43,6 +53,7 @@
   --font-weight-lg: 600;
   --font-weight-xl: 600;
   --font-weight-2xl: 600;
+  --font-weight-3xl: 600;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
