@@ -1,5 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { MultiTransitState, TransitResponse, parseTransitResponse } from '../types/transit'
+import {
+  MultiTransitState,
+  TransitResponse,
+  isValidStructuredTransit,
+  parseTransitResponse,
+} from '../types/transit'
 
 const API_BASE = '/api'
 
@@ -25,6 +30,9 @@ export function isValidTransitResponse(data: unknown): data is TransitResponse {
 export function useTransit() {
   const [state, setState] = useState<MultiTransitState>({
     originRoutes: [],
+    origins: [],
+    generatedAt: null,
+    fastestOrigin: null,
     loading: false,
     error: null,
     lastUpdated: null,
@@ -55,9 +63,16 @@ export function useTransit() {
       }
 
       const originRoutes = parseTransitResponse(data)
+      // During the additive migration (ADR 0006 D-3) the UI still renders the
+      // legacy routes, so a structured part that fails validation is dropped
+      // (empty origins, null fields) rather than failing the whole response.
+      const structured = isValidStructuredTransit(data) ? data : null
 
       setState({
         originRoutes,
+        origins: structured?.origins ?? [],
+        generatedAt: structured?.generatedAt ?? null,
+        fastestOrigin: structured?.fastestOrigin ?? null,
         loading: false,
         error: null,
         lastUpdated: new Date(),
