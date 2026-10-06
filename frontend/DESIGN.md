@@ -233,7 +233,8 @@ components:
 #### Current Spec
 
 - **ダーク専用**の単一テーマ。`index.html` は `<html lang="ja">`、`<meta name="theme-color" content="#0a0a0a">`、
-  `<title>Transit - 六本木一丁目 → つつじヶ丘</title>`。
+  `<title>Transit - 六本木一丁目 → つつじヶ丘</title>`（初回取得までの静的タイトル。タブが出ると `App.tsx` が
+  `document.title` を `{出発駅} → つつじヶ丘 · HH:MM発` に差し替え、アンマウントで戻す。ADR 0007 D-3）。
 - **影を使わない border ベースの奥行き**（詳細は Elevation & Depth）。背景4段とボーダー4段で階層を表現する。
 - **4px グリッド**（`--space-*`、Layout）。**最大幅 600px の単一カラム**を中央寄せした、グランス用（一瞥用）ボード。
 - 日本語（駅名・所要時間・`つつじヶ丘`）と Latin 等幅（カードの出発・到着時刻）の**混植**。
@@ -463,7 +464,9 @@ components:
 - `.headerContent` / `.container`: `max-width: 600px; margin: 0 auto`、padding `--space-4`。
 - `.titleGroup`: ロゴ `Train`（size 20, weight bold, 色 `--accent-blue`）+ `.title`（`Transit`、`--font-size-lg`/`600`、`letter-spacing: -0.02em`）。
 - `.tabs`: `display: flex; gap: --space-1; flex: 1; overflow-x: auto`（出発地タブを横スクロール）。
-- `.tab`: `inline-flex`（`align-items: center; justify-content: center`）、**`flex: 0 0 auto`**、
+  **`role="tablist"`**（`aria-label="出発駅"`。issue #122 / ADR 0007 D-2）。タブは `origins` から描画し、`origins` が
+  空（構造化部分が検証で落ちた）ときだけ旧 `routes` の出発地へフォールバックする（要約行なし）。
+- `.tab`: `inline-flex`（**`flex-direction: column`**、`align-items: center; justify-content: center`）、**`flex: 0 0 auto`**、
   **`min-width` / `min-height: 44px`**（タッチターゲット。Layout 参照）。
   `flex: 0 0 auto` は必須: flex アイテムの既定 `min-width: auto`（＝内容幅の下限）が `.tabs` の `overflow-x: auto`
   スクロールを成立させているところへ `min-width: 44px` を宣言すると、その下限を**より小さい値に置き換えて**しまい、
@@ -471,15 +474,25 @@ components:
   padding `--space-1 --space-3`、ボーダー `1px solid --border-primary`、
   `--radius-md`、色 `--text-secondary`、`--font-size-base`/`500`、`line-height: 1.6`・`word-break: normal`・
   `line-break: strict`（CJK 体裁）、`white-space: nowrap`、`transition: all --transition-fast`。
-  選択状態は **`aria-pressed`**（`origin === activeOrigin`）で支援技術に出す。
+  **`role="tab"`** + **`aria-selected`** + `aria-controls`（共有の 1 枚の `role="tabpanel"`。文脈行と内容分岐を包み、
+  選択中タブで `aria-labelledby`）。**ロービング tabindex**（選択中 `0`・他 `-1`）で、`ArrowRight` / `ArrowLeft`
+  （端で折り返し）・`Home` / `End` が選択とフォーカスを同時に動かす（自動アクティベーション）。Alt / Ctrl / Meta / Shift
+  付きのキーはブラウザに任せる（Alt+ArrowLeft は「戻る」）。
+  2 行目 `.tabSummary`（`--font-size-xs`、各要素は半角スペース区切り、色はタブから継承＝反転チップ上は近黒）:
+  その出発地の `isFastest` 候補の到着 `HH:MM着` + `fastestOrigin` なら `最速`、他は最速との到着差 `+N分`。
+  `status: error` は `取得できず`、`no_candidates` は `便なし`。
+  **初期選択は `fastestOrigin`**（`null` なら先頭）。手動選択は選択時の `lastUpdated` を刻印し、それが最新の成功取得で
+  ある間だけ保持する（`Date` を参照比較。取得中・失敗では `lastUpdated` が変わらない）ので、**次の成功取得で最速の出発地へ戻る**。
 - `.tab:hover:not(.tabActive)`: 地 `--bg-secondary`、色 `--text-primary`。**`:not(.tabActive)` で非選択タブに限定する**のは
   必須: 無印 `.tab:hover`(0,2,0) は `.tabActive`(0,1,0) を出し抜くため、反転チップが白になった瞬間、選択中タブをホバー
   すると地が暗く塗り戻る（iOS ではタップ後に `:hover` が残る）。`.tabActive`: **反転チップ**。地/ボーダー `--bg-inverted`
   （近白）、ラベル `--text-inverted`（近黒）。選択 vs 非選択のコントラストを 1.05:1 → **18.97:1** に上げ、屋外の 20% グレア
   veil 下でも選択状態が残る唯一の要素（ADR 0004）。非選択タブの 1px ボーダーは `--border-primary`（frontmatter
   `components.tab-border`）。
-- `.route`: `activeOrigin` + `ArrowRight`（16, 色 `--text-tertiary`）+ `つつじヶ丘`。`.station` は `--font-size-md`/`500`/
-  `--text-primary`、`line-height: 1.6`・`word-break: normal`・`line-break: strict`。
+- `.context`（文脈行、`margin-bottom --space-3`）: `.route` = `activeOrigin` + `ArrowRight`（16, 色 `--text-tertiary`）+
+  `つつじヶ丘`。`.station` は `--font-size-md`/`500`/`--text-primary`、`line-height: 1.6`・`word-break: normal`・
+  `line-break: strict`。選択中の構造化出発地に候補が 1 件以上あるときは下に `.contextNote` `オフィスから徒歩N分 · 到着が早い順`
+  （`walkMinutes`。`margin-top --space-1`、`--font-size-sm`、`--text-secondary`、同じ CJK 体裁）。
 - `.refreshButton`: **視覚 `32px × 32px`**、地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-md`、
   `aria-label="Refresh"`、`aria-busy={loading}`。`position: relative` + 透明な `::after`（`44px × 44px`・中央）で
   **ヒット領域だけ 44×44** に広げる（視覚寸法とフォーカスリングは 32×32 のまま）。
@@ -488,9 +501,10 @@ components:
   `:disabled` は `opacity: 0.5; cursor: not-allowed`。
   ローディング中は `Spinner`（16）を回し、通常は `ArrowClockwise`（16）。
 - `.spinner`（`spin` 1s linear infinite）は **`@media (prefers-reduced-motion: reduce)` で `animation: none`**。
-- `.content`: 5 分岐の器（issue #121。`hasCards` = `activeRoutes.length > 0`）:
+- `.content`: 5 分岐の器（issue #121。`hasCards` = 選択中出発地のカードが 1 枚以上、`hasData` = 出発地タブが 1 つ以上。カードは `origins` の
+  候補を `candidateToRoute()` で旧文字列形に書き出して描き、`origins` が空のときだけ旧 `routes` を描く）:
   エラー×データ無し（バナーのみ）/ エラー×既存データ（バナー + 直前のカード）/ loading / empty / 通常（カード）。
-  **エラーでもカードを隠さない**: `useTransit` は失敗時に直前の `originRoutes` を保持するので、カードは
+  **エラーでもカードを隠さない**: `useTransit` は失敗時に直前の `origins` / `originRoutes` を保持するので、カードは
   `hasCards` だけで描画し、バナーはその上に重ねる（ADR 0007 D-2）。
   うち**状態3分岐（error / loading / empty）だけ**を `.status`（**常設の `aria-live="polite"`**）で包む。分岐ノードは
   文言ごと条件マウントされるため、差し替えを読み上げさせるには**それらより長生きするコンテナ**側に live region を
@@ -507,15 +521,18 @@ components:
   `1px solid --accent-red-tint-border`・`--radius-md`・**可視ボックス自体が 44×44 以上**）。**`role="alert"`**、
   padding `--space-4`、地 `--accent-red-tint`、罫 `1px solid --accent-red-tint-border`、`--radius-md`、
   色 `--accent-red`、`--font-size-base`（Colors 参照）。**hook の error 文字列（`HTTP error: 500` 等）は描画しない**。
-- `.empty`: **`Tray`（24, 色 `--text-tertiary` = `.emptyIcon`）** + `No departures found`、**`role="status"`**、
+- `.empty`: **`Tray`（24, 色 `--text-tertiary` = `.emptyIcon`）** + 選択中出発地の結果（`status: error` → `取得できず`、
+  他の構造化出発地 → `便なし`、構造化出発地が無いとき → `No departures found`）、**`role="status"`**、
   縦積み `gap --space-3`、padding `--space-12`、地 `--bg-elevated`、罫 `1px solid --border-primary`、`--radius-lg`、
   色 `--text-secondary`、`--font-size-base`、中央寄せ（`components.empty-state`）。**赤もボタンも持たない**
-  （エラーではなく「結果ゼロ」の告知）。描画条件は `!error && !hasCards && !loading && lastUpdated`。
+  （エラーではなく「結果ゼロ」の告知）。描画条件は `!error && !hasCards && (hasData || !loading) && lastUpdated`（カードの無いタブでは再取得中も
+  スピナーに替えず結果を出し続ける）。
   **`lastUpdated` で門番する**のは、`loading` の初期値が `false` のため、これが無いと初回ペイントで空状態が
   一瞬ちらつくため。
 - `.error` / `.empty` の `role` は**必須**（バナー／カードを支援技術に「アラート」「ステータス」として提示する）。
   `tests/App.test.tsx` が 5 分岐（1 分岐 1 テスト）・生エラー文字列の非表示・`再試行` の配線と
-  role・`aria-live`・`aria-busy`・`aria-pressed` を固定している。
+  role・`aria-live`・`aria-busy`、固定クロック下の出発地タブ（tablist / `aria-selected` / ロービング tabindex・
+  最速の自動選択・次の成功取得までの手動選択保持・矢印キー・要約行・`document.title`）と最速マーカーを固定している。
 - `.footer`: `Data from Jorudan`、padding `--space-4`、中央寄せ、`--font-size-xs`、色 `--text-tertiary`、上罫 `1px solid --border-primary`。
 
 #### TransitCard（`TransitCard.tsx` / `TransitCard.module.css`）
@@ -531,20 +548,19 @@ components:
   旧 `--bg-tertiary` #171717 塗りは引き上げたカード地 #1a1a1a に対し 1.03:1 でカードより暗く沈むため、未選択 `.tab` と同じアウトライン idiom に寄せた（issue #96）。ラベルはカード地 #1a1a1a で 6.74:1。
 - `.expandIcon`: `CaretUp`（展開時）/ `CaretDown`（折りたたみ時）、16、色 `--text-tertiary`。
 - `.body`: padding `0 --space-4 --space-4`、`RouteDetail` を内包。
-- **次発マーカー `.cardNext`**（issue #97 / ADR 0004 D-3）: **最早出発のカード**の左端に `width: --space-1`（4px）・
+- **最速マーカー `.cardNext`**（issue #97 / ADR 0004 D-3、ADR 0006 D-4 で改定・issue #122）: **到着が最も早い候補**
+  （サーバーが出発地ごとに立てる `isFastest`）のカードの左端に `width: --space-1`（4px）・
   `--accent-blue` の縦キーライン（`components.card-marker-next`）。`position: absolute` の `::before` で描く
   （左ボーダーは `--radius-lg` の角で楔状に潰れ、カード内容を 4px 右へずらして 2 枚の出発時刻の縦揃えを壊す。
   影は Elevation & Depth で全面禁止）。`pointer-events: none` 必須: 擬似要素のヒットテストは `.card` に落ちるため、
   無いと 4px 帯が `.header` ボタンへのクリックを飲み込む。
-  **マーク対象はデータから導出し、カード位置から推定しない**: バックエンドは Jorudan の候補を**ソートせずに** slice し、
-  Jorudan は経路品質順に並べるため、`index === 0` は「最早」を意味しない。`App.tsx` の `deriveNextIndex()` が
-  `parseSummary().departureTime` から最早出発の index を導出する。ガード 3 件: いずれかが `--:--`（パース失敗）なら
-  マークなし（文字列比較で `--:--` が全数字に先勝ちするため）、時刻差が 6 時間超なら深夜跨ぎを疑いマークなし、
-  同時刻タイは先頭。屋外 20% グレア veil 下で青は ~1.92:1 まで潰れるため、マーカーは単独キャリアではない:
+  **マーク対象はデータから導出し、カード位置から推定しない**（ADR 0004 D-3 は維持）。導出元が最早出発
+  （旧 `deriveNextIndex()`、削除済み）からサーバーの `isFastest` に変わった。旧 `routes` へのフォールバック時は
+  フラグが無いのでマークしない。屋外 20% グレア veil 下で青は ~1.92:1 まで潰れるため、マーカーは単独キャリアではない:
   既定展開と `visually-hidden` ラベルが冗長キューを担う（ADR 0004 の honest limits）。
   擬似要素は支援技術に見えないため、`isNext` のとき `.header` ボタン内に
-  `<span className="visually-hidden">Next departure </span>`（グローバル `index.css` のユーティリティ）を置く。
-- **次発カード（`isNext`）は既定で展開**（`useState(isNext)`）。カードの `key` は位置ではなく列車の同一性
+  `<span className="visually-hidden">最速の便 </span>`（グローバル `index.css` のユーティリティ）を置く。
+- **最速カード（`isNext`）は既定で展開**（フォールバック時は全カード折りたたみ）（`useState(isNext)`）。カードの `key` は位置ではなく列車の同一性
   （`` `${activeOrigin}-${departureTime}-${index}` ``）: React は key でインスタンスを再利用し `useState` の初期化子は
   マウント時しか走らないため、`key={index}` ではタブ切替・リフレッシュ後にマーカーと展開カードがズレる。
 
@@ -582,9 +598,9 @@ components:
 
 #### empty-state（**実装済み**）
 
-- `routes=[]` / `loading=false` / `lastUpdated` あり / `error=null`（Verification Artifacts B の状態 #4）で `.empty`
+- 選択中の出発地にカードが無い / `lastUpdated` あり / `error=null`（Verification Artifacts B の状態 #4）で `.empty`
   カードを描画する。地は `--bg-elevated`（Tech Debt #4 でこの段に役割が付いた）、文字 `--text-secondary`、
-  padding `--space-12`、`Tray`（24）+ 文言 `No departures found`。詳細は上の App の `.empty` を参照。
+  padding `--space-12`、`Tray`（24）+ 文言 `取得できず` / `便なし` / `No departures found`。詳細は上の App の `.empty` を参照。
 
 ### Gaps & Proposals
 
@@ -718,21 +734,21 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 （どちらも `prefers-reduced-motion: reduce` で停止）。タッチターゲット: 44×44（refresh と `更新` は `::after`、タブと `再試行` は
 `min-width`/`min-height`）。ブレークポイント: `max-width: 480px` の 1 本のみ。
 
-### B. 主要 UI 状態（Key UI States）— 実在する16状態
+### B. 主要 UI 状態（Key UI States）— 実在する18状態
 
-コードから抽出した実 UI 状態。ADR 0007 D-2 が旧「14状態以外を発明しない」規則を開き、#15・#16 を足した。
+コードから抽出した実 UI 状態。ADR 0007 D-2 が旧「14状態以外を発明しない」規則を開き、#15〜#18 を足した。
 **新しい状態は ADR で正当化してから足す**（スケルトン・カード別エラー等は存在しない）。
 
 | # | 状態 | 根拠 |
 |---|---|---|
-| 1 | 初回ローディング（`Spinner` 24 + `Loading transit information...`） | `App.tsx` `!error && !hasCards && loading` |
-| 2 | エラーバナー・データ無し（固定 `サーバーに接続できません` + `再試行`、`role="alert"`。hook の error 文字列は非表示） | `App.tsx` `error && !hasCards` / `.error` |
+| 1 | 初回ローディング（`Spinner` 24 + `Loading transit information...`） | `App.tsx` `!error && !hasData && loading` |
+| 2 | エラーバナー・カード無し（固定 `サーバーに接続できません` + `再試行`、`role="alert"`。タブがあれば `表示中は HH:MM 時点のデータです` も出す。hook の error 文字列は非表示） | `App.tsx` `error && !hasCards` / `.error` |
 | 3 | リフレッシュ中（refresh ボタン内 `Spinner` 16・既存カードは残る） | `App.tsx` `refreshButton disabled={loading}` |
-| 4 | 空状態（`routes=[]`・`loading=false`・`lastUpdated` あり・`error=null` → `.empty` カード `Tray`(24) + `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
-| 5 | 次発カード既定展開＋左キーライン（最早出発をデータから導出。パース失敗・6時間超の時刻差ではマークなし） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `deriveNextIndex()` / `.cardNext` |
+| 4 | 空状態（選択中の出発地にカードが無い・`lastUpdated` あり・`error=null`、タブが無ければ `loading=false` → `.empty` カード `Tray`(24) + `取得できず` / `便なし` / `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
+| 5 | 最速カード既定展開＋左キーライン（サーバーの `isFastest` 候補。旧 `routes` フォールバック時はマークなし） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `isNext: candidate.isFastest` / `.cardNext` |
 | 6 | カード展開／折りたたみ | `TransitCard.tsx` `expanded` トグル |
-| 7 | タブ active | `App.module.css` `.tabActive` |
-| 8 | タブ inactive | `.tab` 既定 |
+| 7 | タブ active（`aria-selected="true"`・`tabindex="0"`） | `App.module.css` `.tabActive` |
+| 8 | タブ inactive（`aria-selected="false"`・`tabindex="-1"`） | `.tab` 既定 |
 | 9 | status: ok（緑ドット・隠しラベル `サーバー接続: 正常`） | `StatusIndicator.tsx` `status === 'ok'` |
 | 10 | status: error（赤ドット・隠しラベル `サーバー接続: エラー`） | `status === 'error'` |
 | 11 | status: loading（pulse するドット・隠しラベル `サーバー接続: 確認中`） | `status === 'loading'` |
@@ -741,6 +757,8 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 | 14 | 不正サマリ（`--:--` / `--` 表示） | `parseSummary()` の既定値 |
 | 15 | データ鮮度切れ（最後の成功取得から 180 秒以上 → amber ピル `N分前のデータ` + `更新`。未満は `N秒前に更新` / `N分前に更新`） | `StatusIndicator.tsx` `isStale()` / `.stale` / `components.stale-pill` |
 | 16 | エラーバナー・既存データあり（`サーバーに接続できません` + `表示中は HH:MM 時点のデータです` + `再試行`、直前のカードは表示したまま） | `App.tsx` `error && hasCards` / `.error` + `.cards` |
+| 17 | 出発地ごとの結果（タブ 2 行目: `HH:MM着` + `最速` / `+N分`、`status: error` → `取得できず`、`no_candidates` → `便なし`） | `App.tsx` `tabSummary()` / `.tabSummary` |
+| 18 | 出発地の自動選択（`fastestOrigin`、`null` なら先頭。手動選択は次の成功取得まで保持） | `App.tsx` `heldOrigin ?? autoOrigin` |
 
 横断挙動（独立した状態ではない）: 長い日本語名の折返し（`line-break: strict` / `word-break: normal`）/
 タブ多数時の横スクロール（`overflow-x: auto`）/ `@media (max-width: 480px)` リフロー / refresh ボタンの押下
@@ -767,5 +785,12 @@ ADR 0007 D-1 で UI 文言は**日本語へ移行中**（旧「英語のまま�
 | `N分前のデータ` / `更新` | StatusIndicator 鮮度ピルとそのボタン（180 秒以上） |
 | `Data from Jorudan` | フッター |
 | `つつじヶ丘` | 固定の到着駅 |
+| `出発駅` | 出発地タブの tablist `aria-label` |
+| `HH:MM着` / `最速` / `+N分` | 出発地タブ 2 行目（`ok` の出発地） |
+| `取得できず` / `便なし` | 出発地タブ 2 行目（`status: error` / `no_candidates`）と、その出発地を選択中の空状態カード |
+| `オフィスから徒歩N分 · 到着が早い順` | 文脈行 2 行目（選択中の構造化出発地に候補があるときのみ） |
+| `最速の便` | 最速カードの `visually-hidden` ラベル |
 
-> ブラウザタブの `<title>` のみ日本語を含む: `Transit - 六本木一丁目 → つつじヶ丘`（`index.html`）。
+> ブラウザタブの `<title>`: 初回取得までは `index.html` の `Transit - 六本木一丁目 → つつじヶ丘`、タブが出た後は
+> `document.title` = `{出発駅} → つつじヶ丘 · HH:MM発`（選択中出発地の `isFastest` 候補の出発時刻。候補が無ければ
+> `{出発駅} → つつじヶ丘`）。

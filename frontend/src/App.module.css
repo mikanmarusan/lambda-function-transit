@@ -83,6 +83,7 @@
 .tab {
   display: inline-flex;
   flex: 0 0 auto;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-width: 44px;
@@ -102,6 +103,12 @@
   white-space: nowrap;
 }
 
+/* The tab's second line: earliest arrival + 最速 / +N分, or 取得できず / 便なし. It inherits the
+   tab's colour, so on the inverted chip it turns near-black with the station name. */
+.tabSummary {
+  font-size: var(--font-size-xs);
+}
+
 /* Scoped :not(.tabActive): `.tab:hover` is (0,2,0) and `.tabActive` is (0,1,0), so an unscoped
    hover rule OUT-SPECIFIES the active rule. Once the chip turns white that matters - on iOS
    :hover sticks after a tap, so hovering the selected tab would repaint the chip you just
@@ -119,11 +126,23 @@
   color: var(--text-inverted);
 }
 
+.context {
+  margin-bottom: var(--space-3);
+}
+
 .route {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+}
+
+.contextNote {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
 .station {

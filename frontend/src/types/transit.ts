@@ -1,3 +1,5 @@
+import { formatClockTime } from '../lib/time'
+
 export interface TransitRoute {
   summary: string
   route: string
@@ -183,6 +185,32 @@ export function parseTransitResponse(data: TransitResponse): OriginRoute[] {
     destination,
     transfers: transfers.map(([summary, route]) => ({ summary, route })),
   }))
+}
+
+/**
+ * Writes a structured candidate in the legacy `[summary, route]` string shape, so the existing
+ * `TransitCard` / `RouteDetail` can draw `origins` candidates until they read `Candidate`
+ * directly. Times are the JST `HH:MM` of the ISO instants; the first and last stops are
+ * terminals (`■`), the rest transfers (`◇`), each followed by the line of the leg leaving it.
+ */
+export function candidateToRoute(candidate: Candidate): TransitRoute {
+  const clock = (iso: string) => formatClockTime(Date.parse(iso))
+  // Jorudan's own `N時間M分` / `N時間` / `M分` spelling, which parseSummary reads back verbatim.
+  const hours = Math.floor(candidate.durationMinutes / 60)
+  const minutes = candidate.durationMinutes % 60
+  const duration = hours === 0 ? `${minutes}分` : minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`
+  const summary =
+    `${clock(candidate.departureAt)}発 → ${clock(candidate.arrivalAt)}着` +
+    `(${duration})(${candidate.transferCount}回)`
+  const last = candidate.stops.length - 1
+  const route = candidate.stops
+    .flatMap((stop, index) => {
+      const station = `${index === 0 || index === last ? '■' : '◇'}${stop.station}`
+      const leg = candidate.legs[index]
+      return leg ? [station, `｜${leg.lineName}`] : [station]
+    })
+    .join('\n')
+  return { summary, route }
 }
 
 export function parseSummary(summary: string): {
