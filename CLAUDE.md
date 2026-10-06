@@ -39,6 +39,8 @@ For the system overview and AWS topology diagram, start at the [`docs/architectu
 | Frontend | `frontend/src/App.tsx` | Main application component |
 | Frontend | `frontend/src/components/{TransitCard,RouteDetail,StatusIndicator}.tsx` | UI components |
 | Frontend | `frontend/src/hooks/useTransit.ts` | Data fetching hook |
+| Frontend | `frontend/src/hooks/useNow.ts` | Shared app-wide clock hook |
+| Frontend | `frontend/src/lib/time.ts` | Clock-dependent helpers (leave-by minutes, relative labels) |
 | Frontend | `frontend/src/types/transit.ts` | TypeScript types |
 | Frontend | `frontend/vite.config.ts` | Vite configuration |
 | Frontend | `frontend/Dockerfile` | Frontend container image |
@@ -161,3 +163,4 @@ The Web ACL itself is **not** managed by this stack (it was created by the Cloud
 - When a decision maps scraped free-text values onto a closed set, record the normalization step and the exact-match rule, and name one real out-of-set value that a loose substring match would wrongly capture, so the implementing issue cannot ship a match that silently breaks the null contract.
 - When a stricter parser ships beside a lenient legacy path in the same response, derive the error status from the legacy output as well, so the new parser failing closed on upstream drift can never turn a response the legacy field could still serve into an error for clients that read only the legacy field.
 - When a parser skips over-long input before running its regexes, give its ReDoS tests worst-case lines that fit under that cap as well as huge ones. An over-cap input only exercises the length check and stays green even if a regex turns catastrophic; assert each fixture's length is under the cap so it cannot drift into the skipped range.
+- When a change adds a source module, a hook, or new fields on a hook's return value, update the spec doc's module table and every spec sentence that enumerates that state in the same change, not only the CLAUDE.md Repository Layout table. Both list the module set, so updating one leaves the other stale.
