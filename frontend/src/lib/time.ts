@@ -17,6 +17,19 @@ export function minutesUntilLeave(departureAt: string, walkMinutes: number, nowM
   return Math.floor((departureMs - walkMinutes * MINUTE_MS - nowMs) / MINUTE_MS)
 }
 
+/** Tone of a card's leave-by countdown badge: plenty of time, leave now, or already missed. */
+export type LeaveTone = 'go' | 'now' | 'missed'
+
+/**
+ * The countdown badge for a `minutesUntilLeave()` result: `あとN分で出る` (`go`) from 2 minutes up,
+ * `今すぐ出発` (`now`) at 0 or 1 minute, and `間に合いません` (`missed`) below 0.
+ */
+export function leaveCountdown(minutes: number): { tone: LeaveTone; label: string } {
+  if (minutes < 0) return { tone: 'missed', label: '間に合いません' }
+  if (minutes <= 1) return { tone: 'now', label: '今すぐ出発' }
+  return { tone: 'go', label: `あと${minutes}分で出る` }
+}
+
 /**
  * Relative label for how long ago `sinceMs` was: `N秒前` under one minute,
  * `N分前` from one minute on. A `sinceMs` in the future (clock skew) or a non-finite input reads `0秒前`.

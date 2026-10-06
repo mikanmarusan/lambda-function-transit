@@ -76,9 +76,11 @@ const UNREFERENCED_GENERATED = new Set([
   '--font-weight-lg',
   '--font-weight-xl',
   '--font-weight-2xl',
+  '--font-weight-3xl',
   '--tracking-lg',
   '--tracking-xl',
   '--tracking-2xl',
+  '--tracking-3xl',
 ])
 
 /** The font-size scale, as the call sites must name it (never the generated --text-* names). */
@@ -90,6 +92,7 @@ const FONT_SIZE_ALIASES = new Set([
   '--font-size-lg',
   '--font-size-xl',
   '--font-size-2xl',
+  '--font-size-3xl',
 ])
 
 /** Drops /* ... *\/ comments so a commented-out example is never read as a declaration. */
@@ -716,6 +719,77 @@ describe('stale-data amber pill (issue #121, ADR 0008 D-3)', () => {
     // Guards the guard: if this ever reaches 4.5:1 the ratio maths has broken and the amber
     // contracts above would be vacuously green.
     expect(contrastRatio(parseHex('#b45309'), parseHex(cardFill))).toBeLessThan(4.5)
+  })
+})
+
+describe('line identity rings (issue #123, ADR 0008 D-3)', () => {
+  // Reads the ring declarations off LinePill.module.css and the card fill off TransitCard.module.css,
+  // not just the token values: repointing a ring at another colour, or deleting its rule, fails here.
+  const pillModuleCss = stripComments(readFileSync(join(srcDir, 'components', 'LinePill.module.css'), 'utf-8'))
+  const cardModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'TransitCard.module.css'), 'utf-8')
+  )
+  const cardFill = resolveColor(declaredValue(ruleBody(cardModuleCss, 'card'), 'background-color', 'card'))
+
+  /** The closed lineCode set (ADR 0008 D-1) plus the neutral style, as generated tokens. */
+  const LINE_TOKENS = ['n', 'm', 'h', 'z', 'e', 's', 'ko', 'neutral'].map((code) => `--color-line-${code}`)
+  /** The allow-listed ring class of each closed-set code, and the neutral outline of a null code. */
+  const PAINTED: Array<[string, string, string]> = [
+    ['lineN', 'border-color', '--color-line-n'],
+    ['lineM', 'border-color', '--color-line-m'],
+    ['lineH', 'border-color', '--color-line-h'],
+    ['lineZ', 'border-color', '--color-line-z'],
+    ['lineE', 'border-color', '--color-line-e'],
+    ['lineS', 'border-color', '--color-line-s'],
+    ['lineKo', 'border-color', '--color-line-ko'],
+  ]
+
+  it('generates exactly the closed line set plus the neutral style', () => {
+    const generated = globallyDeclaredTokens(generatedCss).filter((name) => name.startsWith('--color-line-'))
+    expect([...generated].sort()).toEqual([...LINE_TOKENS].sort())
+  })
+
+  it.each(LINE_TOKENS)('renders %s at >= 3:1 against the card fill (WCAG 1.4.11)', (name) => {
+    expect(contrastRatio(parseHex(token(name)), parseHex(cardFill))).toBeGreaterThanOrEqual(3)
+  })
+
+  it.each(PAINTED)('paints .%s with its own line token', (selector, property, name) => {
+    expect(resolveColor(declaredValue(ruleBody(pillModuleCss, selector), property, selector))).toBe(token(name))
+  })
+
+  it('outlines a null-code line name in the neutral line token', () => {
+    const body = ruleBody(pillModuleCss, 'nameNeutral')
+    const match = /border\s*:\s*(?:[^;}]*?\s)?(var\(\s*--[\w-]+\s*\))/.exec(body)
+    expect(match, 'no border colour in .nameNeutral').not.toBeNull()
+    expect(resolveColor(match![1])).toBe(token('--color-line-neutral'))
+  })
+
+  it('still fails the 都営大江戸線 brand hex (#b6007a = 2.71:1), proving the 3:1 check has teeth', () => {
+    // The on-dark variant exists because the brand hex falls below 3:1 on the card fill (D-3).
+    expect(contrastRatio(parseHex('#b6007a'), parseHex(cardFill))).toBeLessThan(3)
+  })
+})
+
+describe('leave-by countdown badge (issue #123)', () => {
+  // The badge text must stay readable (WCAG 1.4.3) in all three tones, read off the actual rules.
+  const cardModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'TransitCard.module.css'), 'utf-8')
+  )
+  const cardFill = resolveColor(declaredValue(ruleBody(cardModuleCss, 'card'), 'background-color', 'card'))
+  const text = (selector: string) => resolveColor(declaredValue(ruleBody(cardModuleCss, selector), 'color', selector))
+
+  it.each(['countdownGo', 'countdownMissed'])('renders .%s text at >= 4.5:1 on the card fill', (selector) => {
+    expect(contrastRatio(parseHex(text(selector)), parseHex(cardFill))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('renders .countdownNow amber text at >= 4.5:1 over its tint composited on the card fill', () => {
+    const tint = resolveColor(declaredValue(ruleBody(cardModuleCss, 'countdownNow'), 'background-color', 'countdownNow'))
+    const surface = composite(tint, cardFill)
+    expect(contrastRatio(parseHex(text('countdownNow')), surface)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('sets the departure time on the 3xl rung', () => {
+    expect(declaredValue(ruleBody(cardModuleCss, 'departure'), 'font-size', 'departure')).toBe('var(--font-size-3xl)')
   })
 })
 

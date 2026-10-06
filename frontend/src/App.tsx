@@ -58,13 +58,16 @@ function App() {
   const fastestArrivalMs = fastestOriginCandidate ? Date.parse(fastestOriginCandidate.arrivalAt) : null
 
   // The keyline marks the server's `isFastest` candidate (ADR 0006 D-4), never a card position.
-  // The legacy fallback carries no such flag, so it marks nothing.
-  const cards: { route: TransitRoute; isNext: boolean }[] = structured
-    ? (activeResult?.candidates ?? []).map(candidate => ({
-        route: candidateToRoute(candidate),
-        isNext: candidate.isFastest,
-      }))
-    : (originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []).map(route => ({ route, isNext: false }))
+  // The legacy fallback carries no such flag, so it marks nothing. The cards keep the fetched
+  // order: the per-second countdown inside each card never re-sorts or drops one.
+  const cards: { route: TransitRoute; isNext: boolean; structured?: { candidate: Candidate; walkMinutes: number } }[] =
+    structured
+      ? (activeResult?.candidates ?? []).map(candidate => ({
+          route: candidateToRoute(candidate),
+          isNext: candidate.isFastest,
+          structured: { candidate, walkMinutes: activeResult?.walkMinutes ?? 0 },
+        }))
+      : (originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []).map(route => ({ route, isNext: false }))
   // A fetch error does not hide the cards: useTransit keeps the last-known data on failure, so
   // they stay on screen under the error banner (ADR 0007 D-2).
   const hasCards = cards.length > 0
@@ -268,11 +271,12 @@ function App() {
                       leave a stale card expanded after a tab switch or refresh. The index
                       tiebreaker only guards against two candidates sharing a departure time
                       (duplicate keys); the origin + time prefix still forces the remount. */}
-                  {cards.map(({ route, isNext }, index) => (
+                  {cards.map(({ route, isNext, structured: card }, index) => (
                     <TransitCard
                       key={`${activeOrigin}-${parseSummary(route.summary).departureTime}-${index}`}
                       route={route}
                       isNext={isNext}
+                      structured={card}
                     />
                   ))}
                 </div>

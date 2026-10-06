@@ -50,6 +50,17 @@
   --accent-amber-tint: var(--color-accent-amber-tint);
   --accent-amber-tint-border: var(--color-accent-amber-tint-border);
 
+  /* Line identity rings (ADR 0008 D-1/D-3): one per closed-set lineCode, plus the neutral style
+     for a leg whose lineCode is null. Each is >= 3:1 on the card fill (--bg-elevated). */
+  --line-n: var(--color-line-n);
+  --line-m: var(--color-line-m);
+  --line-h: var(--color-line-h);
+  --line-z: var(--color-line-z);
+  --line-e: var(--color-line-e);
+  --line-s: var(--color-line-s);
+  --line-ko: var(--color-line-ko);
+  --line-neutral: var(--color-line-neutral);
+
   /* 2a. Aliases - Font size scale (call sites use --font-size-*, never --text-* sizes) */
   --font-size-xs: var(--text-xs);
   --font-size-sm: var(--text-sm);
@@ -58,6 +69,7 @@
   --font-size-lg: var(--text-lg);
   --font-size-xl: var(--text-xl);
   --font-size-2xl: var(--text-2xl);
+  --font-size-3xl: var(--text-3xl);
 
   /* 2a. Aliases - Spacing (4px grid) */
   --space-1: var(--spacing-1);

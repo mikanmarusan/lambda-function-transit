@@ -33,7 +33,7 @@
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-4);
   width: 100%;
   padding: var(--space-4);
@@ -45,50 +45,112 @@
   font: inherit;
 }
 
-.times {
+/* Three stacked rows: departure + countdown, arrival + duration + labels, line pills. */
+.summary {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-2);
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 
-.departure,
-.arrival {
-  font-size: var(--font-size-xl);
+.lead,
+.meta,
+.lines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lead {
+  gap: var(--space-3);
+}
+
+.meta {
+  gap: var(--space-2);
+}
+
+.lines {
+  gap: var(--space-1);
+}
+
+/* The departure leads the card: the largest rung of the type scale (ADR 0008 D-4). */
+.departure {
+  font-size: var(--font-size-3xl);
   font-weight: 600;
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .arrival {
   color: var(--accent-blue);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  font-family: var(--font-mono);
 }
 
-.arrow {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-md);
+.duration {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
 }
 
-.meta {
-  display: flex;
-  gap: var(--space-2);
-  flex: 1;
-}
-
-.badge {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+/* Leave-by countdown from the shared clock: green while there is time, amber at <= 1 min,
+   dimmed once missed. The wording carries the state, so colour is never the only cue. */
+.countdown {
   padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+.countdownGo {
+  color: var(--accent-green);
+}
+
+.countdownNow {
+  color: var(--accent-amber);
+  background-color: var(--accent-amber-tint);
+  border-color: var(--accent-amber-tint-border);
+}
+
+.countdownMissed {
+  color: var(--text-tertiary);
+  border-color: var(--border-primary);
+}
+
+/* 最速 / 乗換少 labels: the outline idiom of the unselected tab (issue #96). */
+.badge {
+  padding: 0 var(--space-2);
   background-color: transparent;
   border: 1px solid var(--border-tertiary);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
   color: var(--text-secondary);
 }
 
+.badgeFastest {
+  color: var(--accent-blue);
+}
+
+.chevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
 .expandIcon {
+  display: flex;
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -97,27 +159,13 @@
   padding: 0 var(--space-4) var(--space-4);
 }
 
+/* Narrow viewports: a tighter header gap, and the arrival time one rung larger for a phone glance
+   (the departure already sits on the top rung). */
 @media (max-width: 480px) {
   .header {
-    flex-wrap: wrap;
     gap: var(--space-3);
   }
 
-  .times {
-    flex-basis: 100%;
-    order: 1;
-  }
-
-  .meta {
-    order: 2;
-    flex: 1;
-  }
-
-  .expandIcon {
-    order: 3;
-  }
-
-  .departure,
   .arrival {
     font-size: var(--font-size-2xl);
   }

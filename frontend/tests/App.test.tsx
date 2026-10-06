@@ -455,6 +455,23 @@ describe('station tabs (issue #122, ADR 0007 D-2)', () => {
     expect(screen.getByRole('alert').textContent).toContain('表示中は 18:40 時点のデータです')
   })
 
+  it('counts each card down with its own origin\'s walk minutes (issue #123)', () => {
+    // Same 18:49 departure, same 18:40 clock: only walkMinutes differs, so the badges must too.
+    mockTransit({
+      origins: [
+        originResult(ROPPONGI, [candidate('18:49', '19:38', true)], 'ok', 4),
+        originResult(KAMIYACHO, [candidate('18:49', '19:30', true)], 'ok', 9),
+      ],
+      fastestOrigin: ROPPONGI,
+    })
+    render(<App />)
+
+    expect(screen.getByText('あと5分で出る')).toBeDefined()
+    fireEvent.click(tab(KAMIYACHO))
+    expect(screen.getByText('今すぐ出発')).toBeDefined()
+    expect(screen.queryByText('あと5分で出る')).toBeNull()
+  })
+
   it('falls back to the legacy origins, without summaries, when the structured field is absent', () => {
     mockTransit({ originRoutes: routes })
     render(<App />)

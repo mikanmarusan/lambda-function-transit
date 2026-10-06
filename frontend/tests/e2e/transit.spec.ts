@@ -212,8 +212,8 @@ test.describe('Transit App', () => {
     await page.goto('/')
 
     await expect(page.getByText('18:49', { exact: true })).toBeVisible()
-    // Exact: the selected tab's summary also reads `19:38着`.
-    await expect(page.getByText('19:38', { exact: true })).toBeVisible()
+    // Exact: the selected tab's summary reads `19:38着 最速`, the card `19:38着` alone.
+    await expect(page.getByText('19:38着', { exact: true })).toBeVisible()
   })
 
   test('paints the card outline at the outdoor-legibility border (issue #96)', async ({ page }) => {
@@ -564,6 +564,75 @@ test.describe('Computed token values', () => {
     await expect(empty).toBeVisible()
     expect(await computed(empty, 'background-color')).toBe('rgb(26, 26, 26)')
     expect(await computed(empty, 'color')).toBe('rgb(161, 161, 161)')
+  })
+})
+
+test.describe('Transit card redesign (issue #123)', () => {
+  // Pin the clock and the zone: the countdown is departure - walk - now, and the times print JST.
+  // 六本木一丁目's first candidate leaves at 18:49 with a 4-minute walk, so leave-by is 18:45. The
+  // clock starts mid-minute (18:40:30) so the milliseconds that elapse after install never cross
+  // a floor boundary: 4.5 minutes reads あと4分, and each runFor lands half a minute from the next.
+  test.use({ timezoneId: 'Asia/Tokyo' })
+
+  test.beforeEach(async ({ page }) => {
+    await page.clock.install({ time: new Date(Date.parse(at('18:40')) + 30_000) })
+    await mockApi(page)
+  })
+
+  const card = (page: Page, index: number) => page.locator('[class*="_card_"]').nth(index)
+  const countdown = (page: Page, index: number) => card(page, index).locator('[class*="_countdown_"]')
+
+  test('leads with the departure and reads the arrival, duration, transfers and labels', async ({ page }) => {
+    await page.goto('/')
+
+    const first = card(page, 0)
+    const departure = first.locator('[class*="_departure_"]')
+    await expect(departure).toHaveText('18:49')
+    // The 3xl rung (28px).
+    expect(await computed(departure, 'font-size')).toBe('28px')
+    await expect(first.getByText('19:38着', { exact: true })).toBeVisible()
+    await expect(first.getByText('49分 · 乗換1回', { exact: true })).toBeVisible()
+    await expect(first.getByText('最速', { exact: true })).toBeVisible()
+    await expect(first.getByText('乗換少', { exact: true })).toBeVisible()
+    await expect(card(page, 1).getByText('最速', { exact: true })).toHaveCount(0)
+  })
+
+  test('counts down to leave-by: green, amber at <= 1 min, dimmed once missed, without reordering', async ({
+    page,
+  }) => {
+    await page.goto('/')
+
+    await expect(countdown(page, 0)).toHaveText('あと4分で出る')
+    expect(await computed(countdown(page, 0), 'color')).toBe('rgb(34, 197, 94)')
+    await expect(countdown(page, 1)).toHaveText('あと19分で出る')
+
+    // 18:44:00 - 1 minute to leave-by.
+    await page.clock.runFor('03:30')
+    await expect(countdown(page, 0)).toHaveText('今すぐ出発')
+    expect(await computed(countdown(page, 0), 'color')).toBe('rgb(245, 158, 11)')
+
+    // 18:46:00 - past leave-by.
+    await page.clock.runFor('02:00')
+    await expect(countdown(page, 0)).toHaveText('間に合いません')
+    expect(await computed(countdown(page, 0), 'color')).toBe('rgb(138, 138, 138)')
+    // The list stays as fetched: the missed train is neither dropped nor moved.
+    await expect(page.locator('[class*="_card_"]')).toHaveCount(2)
+    await expect(card(page, 0).locator('[class*="_departure_"]')).toHaveText('18:49')
+  })
+
+  test('shows the line pills, ring-coloured from tokens, while the card is collapsed', async ({ page }) => {
+    await page.goto('/')
+
+    const collapsed = card(page, 1)
+    await expect(collapsed.getByRole('button')).toHaveAttribute('aria-expanded', 'false')
+    const codes = collapsed.locator('[class*="_code_"]')
+    await expect(codes).toHaveText(['N', 'Z'])
+    await expect(collapsed.getByText('東京メトロ南北線', { exact: true })).toBeVisible()
+    // 南北線 #00ac9b and 半蔵門線 #8f76d6, through the allow-listed ring classes; white circle fill.
+    expect(await computed(codes.nth(0), 'border-top-color')).toBe('rgb(0, 172, 155)')
+    expect(await computed(codes.nth(1), 'border-top-color')).toBe('rgb(143, 118, 214)')
+    expect(await computed(codes.nth(0), 'background-color')).toBe('rgb(250, 250, 250)')
+    await expect(collapsed.locator('[style]')).toHaveCount(0)
   })
 })
 
