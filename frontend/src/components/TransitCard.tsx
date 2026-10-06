@@ -8,13 +8,14 @@ import { RouteDetail } from './RouteDetail'
 import styles from './TransitCard.module.css'
 
 interface TransitCardProps {
-  /** The legacy `[summary, route]` strings: the times, the duration and the expanded timeline. */
+  /** The legacy `[summary, route]` strings: the times, the duration, and the expanded timeline of a legacy card. */
   route: TransitRoute
   /** True on the origin's earliest-arriving candidate (the server's `isFastest`, never a card position). */
   isNext: boolean
   /**
    * The structured candidate behind `route`, with its origin's walk minutes. It adds the
-   * countdown badge, the 最速 / 乗換少 labels and the line pills; the legacy fallback has none.
+   * countdown badge, the 最速 / 乗換少 labels, the line pills and the structured `RouteDetail`;
+   * the legacy fallback has none.
    */
   structured?: { candidate: Candidate; walkMinutes: number }
 }
@@ -76,7 +77,7 @@ export function TransitCard({ route, isNext, structured }: TransitCardProps) {
       </button>
       {expanded && (
         <div className={styles.body}>
-          <RouteDetail route={route.route} />
+          <RouteDetail route={route.route} candidate={structured?.candidate} />
         </div>
       )}
     </div>

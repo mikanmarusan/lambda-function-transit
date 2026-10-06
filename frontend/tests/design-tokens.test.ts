@@ -770,6 +770,43 @@ describe('line identity rings (issue #123, ADR 0008 D-3)', () => {
   })
 })
 
+describe('route detail rails and badges (issue #124, ADR 0008 D-3)', () => {
+  // Reads the rail and badge declarations off RouteDetail.module.css and the ground off its
+  // .container: the detail sits on --bg-tertiary, not the card fill, so the contracts use that.
+  const detailModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'RouteDetail.module.css'), 'utf-8')
+  )
+  const value = (selector: string, property: string) =>
+    declaredValue(ruleBody(detailModuleCss, selector), property, selector)
+  const ground = resolveColor(value('container', 'background-color'))
+
+  const RAILS: Array<[string, string]> = [
+    ['railN', '--color-line-n'],
+    ['railM', '--color-line-m'],
+    ['railH', '--color-line-h'],
+    ['railZ', '--color-line-z'],
+    ['railE', '--color-line-e'],
+    ['railS', '--color-line-s'],
+    ['railKo', '--color-line-ko'],
+    ['railNeutral', '--color-line-neutral'],
+  ]
+
+  it('paints the rail with currentColor, so the line class alone picks its colour', () => {
+    expect(value('rail', 'background-color')).toBe('currentColor')
+  })
+
+  it.each(RAILS)('sets .%s to its own line token at >= 3:1 on the detail ground (WCAG 1.4.11)', (selector, name) => {
+    const colour = resolveColor(value(selector, 'color'))
+    expect(colour).toBe(token(name))
+    expect(contrastRatio(parseHex(colour), parseHex(ground))).toBeGreaterThanOrEqual(3)
+  })
+
+  it('renders the 余裕なし amber text at >= 4.5:1 over its tint composited on the detail ground', () => {
+    const surface = composite(resolveColor(value('badgeTight', 'background-color')), ground)
+    expect(contrastRatio(parseHex(resolveColor(value('badgeTight', 'color'))), surface)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
 describe('leave-by countdown badge (issue #123)', () => {
   // The badge text must stay readable (WCAG 1.4.3) in all three tones, read off the actual rules.
   const cardModuleCss = stripComments(

@@ -7,6 +7,9 @@
 .timeline {
   display: flex;
   flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .stop {
@@ -69,6 +72,171 @@
   flex-direction: column;
   gap: 2px;
   padding-bottom: var(--space-1);
+}
+
+/* Structured route (issue #124): an <ol> of alternating stop and leg rows on one three-column grid -
+   times, marker (dot or rail), body - so every time and every dot lines up down the route. */
+.route {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stopRow,
+.legRow {
+  display: grid;
+  grid-template-columns: calc(var(--space-12) + var(--space-2)) 12px minmax(0, 1fr);
+  column-gap: var(--space-3);
+}
+
+.times {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.track {
+  display: flex;
+  justify-content: center;
+}
+
+/* The leg rail paints with currentColor; one allow-listed .rail* class below sets that colour to the
+   leg's line token (ADR 0008 D-1), and a null code falls back to the neutral line colour. */
+.rail {
+  width: 4px;
+  height: 100%;
+  min-height: var(--space-6);
+  background-color: currentColor;
+}
+
+.railN {
+  color: var(--line-n);
+}
+
+.railM {
+  color: var(--line-m);
+}
+
+.railH {
+  color: var(--line-h);
+}
+
+.railZ {
+  color: var(--line-z);
+}
+
+.railE {
+  color: var(--line-e);
+}
+
+.railS {
+  color: var(--line-s);
+}
+
+.railKo {
+  color: var(--line-ko);
+}
+
+.railNeutral {
+  color: var(--line-neutral);
+}
+
+.stopBody,
+.legBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.stopBody {
+  padding-bottom: var(--space-1);
+}
+
+/* The vertical padding sits on the body, not the row, so the rail in .track spans the full row. */
+.legBody {
+  padding: var(--space-2) 0;
+}
+
+.legMeta {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+/* Boarding position: the one value the rider acts on mid-route, so it is a bordered callout with
+   the car number on a larger rung than anything else in the leg. */
+.car {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.carLabel {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+.carValue {
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* 乗換 / 待ち: the outline idiom of the card's 最速 / 乗換少 labels. */
+.badge {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1.6;
+  word-break: normal;
+  line-break: strict;
+}
+
+/* 降車不要: a filled chip, since the rider stays aboard instead of transferring. */
+.badgeThrough {
+  color: var(--text-primary);
+  background-color: var(--bg-elevated);
+}
+
+/* 余裕なし: a 0-minute wait, in the amber of the card's 今すぐ出発 badge. The wording carries the
+   warning, so colour is never the only cue. */
+.badgeTight {
+  color: var(--accent-amber);
+  background-color: var(--accent-amber-tint);
+  border-color: var(--accent-amber-tint-border);
+  font-weight: 600;
 }
 
 /* CJK body text (station and line names): kinsoku on, no letter-spacing, and never break-all /
