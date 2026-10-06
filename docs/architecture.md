@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: aa04709be858a9d6fa2e5eb834bf0f07cb494967 -->
+<!-- spec-synced-through: 9185b2ceb93e73f0a70fee1adf5aa31b66143820 -->
 
 ## 1. Overview
 
@@ -38,7 +38,7 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | `escapeRegExp()` | Escapes dynamic substrings used inside route-parsing regular expressions to prevent ReDoS | `src/index.mjs` |
 | `CookieJar` | Domain-attribute–honouring cookie store built on `Headers.getSetCookie()` | `src/index.mjs` |
 | Local dev server | Serves the unprefixed `/transit` and `/status` paths for local development | `src/dev-server.mjs` |
-| `isValidStructuredTransit()` | Validates the structured `origins` / `generatedAt` / `destination` / `fastestOrigin` fields against `STRUCTURED_LIMITS` (≤ 10 origins, ≤ 10 candidates, ≤ 20 stops — legs bounded through `stops.length === legs.length + 1` — strings ≤ 100 chars, ISO 8601 `+09:00` timestamps) and the `LINE_CODES` allow-list; `useTransit()` drops a payload that fails it (empty `origins`, `null` fields) while still returning the legacy `routes` | `frontend/src/types/transit.ts`, `frontend/src/hooks/useTransit.ts` |
+| `isValidStructuredTransit()` | Validates the structured `origins` / `generatedAt` / `destination` / `fastestOrigin` fields against `STRUCTURED_LIMITS` (≤ 10 origins, ≤ 10 candidates, ≤ 20 stops — legs bounded through `stops.length === legs.length + 1` — strings ≤ 100 chars, minute and count fields integers 0–1440, ISO 8601 `+09:00` timestamps) and the `LINE_CODES` allow-list, and requires `fastestOrigin` to be `null` or one of the `origins[].origin` names; `useTransit()` drops a payload that fails it (empty `origins`, `null` fields) while still returning the legacy `routes` | `frontend/src/types/transit.ts`, `frontend/src/hooks/useTransit.ts` |
 | `useNow()` | One app-wide clock: a single `setInterval` (`NOW_TICK_MS`, 1 s) shared by every subscriber via `useSyncExternalStore`, cleared when the last subscriber unmounts and re-sampled on `visibilitychange` to visible, so no component calls `Date.now()` during render | `frontend/src/hooks/useNow.ts` |
 | `minutesUntilLeave()` / `relativeTimeLabel()` | Whole minutes before the rider must leave (`departureAt − walkMinutes − now`, floored; `0` = leave now, negative = missed) and the `N秒前` / `N分前` label; both take absolute instants, so results do not depend on the runtime time zone | `frontend/src/lib/time.ts` |
 | `deriveNextIndex()` | Derives the index of the earliest departure from the parsed `departureTime`s — never from card position — or `null` to mark nothing (see §5 Frontend Render Branches) | `frontend/src/App.tsx` |
