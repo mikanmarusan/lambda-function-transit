@@ -20,7 +20,61 @@ const ROUTE_BODY = [
   `■${TSUTSUJIGAOKA}`,
 ].join('\n')
 
+/** JST instant on the fixture day, the shape every structured timestamp takes (ADR 0006 D-2). */
+const at = (hhmm: string) => `2026-07-13T${hhmm}:00+09:00`
+
+const stop = (station: string) => ({
+  station,
+  arrivalPlatform: null,
+  departurePlatform: null,
+  transferMinutes: null,
+  waitMinutes: null,
+  noAlight: false,
+})
+
+/** One structured candidate on the ROUTE_BODY path: 南北線 to 溜池山王, then a 銀座線・半蔵門線 leg. */
+function candidate(departure: string, arrival: string, isFastest = false) {
+  const leg = (lineName: string, lineCode: string, from: string, to: string) => ({
+    lineName,
+    lineCode,
+    trainType: null,
+    via: null,
+    destination: null,
+    departAt: at(from),
+    arriveAt: at(to),
+    minutes: 10,
+    distanceKm: null,
+    carPosition: null,
+  })
+  return {
+    departureAt: at(departure),
+    arrivalAt: at(arrival),
+    durationMinutes: 49,
+    transferCount: 1,
+    isFastest,
+    isFewestTransfers: isFastest,
+    stops: [stop(ROPPONGI), stop('溜池山王'), stop(TSUTSUJIGAOKA)],
+    legs: [
+      leg('東京メトロ南北線', 'N', departure, departure),
+      leg('東京メトロ銀座線・半蔵門線直通', 'Z', departure, arrival),
+    ],
+  }
+}
+
+function originResult(origin: string, candidates: unknown[], status = 'ok', walkMinutes = 4) {
+  return { origin, walkMinutes, searchedFrom: at('18:44'), status, candidates }
+}
+
+/** The structured fields beside the legacy `routes` (ADR 0006 D-3: the response carries both). */
+function structured(fastestOrigin: string | null, origins: unknown[]) {
+  return { generatedAt: at('18:40'), destination: TSUTSUJIGAOKA, fastestOrigin, origins }
+}
+
 const TRANSIT_PAYLOAD = {
+  ...structured(ROPPONGI, [
+    originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+    originResult(TOKYO, [candidate('18:55', '19:40', true)]),
+  ]),
   routes: [
     {
       origin: ROPPONGI,
@@ -132,7 +186,7 @@ test.describe('Transit App', () => {
     await page.goto('/')
 
     await expect(page.locator('h1')).toHaveText('Transit')
-    await expect(page.getByRole('button', { name: ROPPONGI })).toBeVisible()
+    await expect(page.getByRole('tab', { name: new RegExp(ROPPONGI) })).toBeVisible()
     // The destination shows twice: the route line and the expanded card's timeline terminus.
     await expect(page.getByText(TSUTSUJIGAOKA).first()).toBeVisible()
   })
@@ -157,8 +211,9 @@ test.describe('Transit App', () => {
   test('should render transit cards once the fetch settles', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByText('18:49')).toBeVisible()
-    await expect(page.getByText('19:38')).toBeVisible()
+    await expect(page.getByText('18:49', { exact: true })).toBeVisible()
+    // Exact: the selected tab's summary also reads `19:38着`.
+    await expect(page.getByText('19:38', { exact: true })).toBeVisible()
   })
 
   test('paints the card outline at the outdoor-legibility border (issue #96)', async ({ page }) => {
@@ -173,14 +228,16 @@ test.describe('Transit App', () => {
     expect(await computed(card, 'border-top-color')).toBe('rgb(102, 102, 102)')
   })
 
-  test('should mark the active tab with aria-pressed', async ({ page }) => {
+  test('should mark the active tab with aria-selected', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('button', { name: ROPPONGI })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('button', { name: TOKYO })).toHaveAttribute('aria-pressed', 'false')
+    const roppongi = page.getByRole('tab', { name: new RegExp(ROPPONGI) })
+    const tokyo = page.getByRole('tab', { name: new RegExp(TOKYO) })
+    await expect(roppongi).toHaveAttribute('aria-selected', 'true')
+    await expect(tokyo).toHaveAttribute('aria-selected', 'false')
 
-    await page.getByRole('button', { name: TOKYO }).click()
-    await expect(page.getByRole('button', { name: TOKYO })).toHaveAttribute('aria-pressed', 'true')
+    await tokyo.click()
+    await expect(tokyo).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('18:55')).toBeVisible()
   })
 
@@ -195,7 +252,7 @@ test.describe('Transit App', () => {
     await page.goto('/')
 
     await expect(page.locator('h1')).toHaveText('Transit')
-    await expect(page.getByRole('button', { name: ROPPONGI })).toBeVisible()
+    await expect(page.getByRole('tab', { name: new RegExp(ROPPONGI) })).toBeVisible()
   })
 
   test('should handle dark theme', async ({ page }) => {
@@ -314,7 +371,7 @@ test.describe('Touch targets (Tech Debt #6)', () => {
     await mockApi(page)
     await page.goto('/')
 
-    const tabs = page.getByRole('button', { name: new RegExp(`${ROPPONGI}|${TOKYO}`) })
+    const tabs = page.getByRole('tab')
     await expect(tabs).toHaveCount(2)
 
     for (const tab of await tabs.all()) {
@@ -390,7 +447,7 @@ test.describe('CJK typography', () => {
     await mockApi(page)
     await page.goto('/')
 
-    const tab = page.getByRole('button', { name: ROPPONGI })
+    const tab = page.getByRole('tab', { name: new RegExp(ROPPONGI) })
     const routeStation = page.locator('[class*="station"]').first()
     const lineName = page.locator('[class*="lineName"]').first()
 
@@ -426,6 +483,8 @@ test.describe('CJK typography', () => {
       },
     })
     await page.goto('/')
+    // The legacy-only payload marks no card (no `isFastest`), so none opens by default.
+    await page.getByRole('button', { name: /18:49/ }).click()
 
     const raw = page.locator('[class*="rawRoute"]')
     await expect(raw).toBeVisible()
@@ -463,8 +522,8 @@ test.describe('Inverted selected chip (issue #95, ADR 0004)', () => {
     await mockApi(page)
     await page.goto('/')
 
-    const active = page.getByRole('button', { name: ROPPONGI })
-    await expect(active).toHaveAttribute('aria-pressed', 'true')
+    const active = page.getByRole('tab', { name: new RegExp(ROPPONGI) })
+    await expect(active).toHaveAttribute('aria-selected', 'true')
     // The inverted chip fill, --bg-inverted #fafafa.
     expect(await computed(active, 'background-color')).toBe('rgb(250, 250, 250)')
 
@@ -505,5 +564,125 @@ test.describe('Computed token values', () => {
     await expect(empty).toBeVisible()
     expect(await computed(empty, 'background-color')).toBe('rgb(26, 26, 26)')
     expect(await computed(empty, 'color')).toBe('rgb(161, 161, 161)')
+  })
+})
+
+test.describe('Station tabs (issue #122, ADR 0007 D-2)', () => {
+  // Pin the clock and the zone: the tab summaries and the title print JST wall-clock times.
+  test.use({ timezoneId: 'Asia/Tokyo' })
+
+  const KAMIYACHO = '神谷町'
+  const AZABU = '麻布十番'
+  const TAMEIKE = '溜池山王'
+
+  /** 神谷町 arrives first, so the fastest origin is NOT the first tab; 麻布十番 failed, 溜池山王 has no train. */
+  const STATION_PAYLOAD = {
+    ...structured(KAMIYACHO, [
+      originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+      originResult(KAMIYACHO, [candidate('18:52', '19:30', true)], 'ok', 7),
+      originResult(AZABU, [], 'error', 11),
+      originResult(TAMEIKE, [], 'no_candidates', 9),
+    ]),
+    routes: [],
+  }
+
+  const tab = (page: Page, name: string) => page.getByRole('tab', { name: new RegExp(name) })
+
+  test.beforeEach(async ({ page }) => {
+    await page.clock.install({ time: new Date(at('18:40')) })
+    await mockApi(page, { transit: STATION_PAYLOAD })
+  })
+
+  test('exposes a tablist that auto-selects the fastest origin and summarises every tab', async ({ page }) => {
+    await page.goto('/')
+
+    const tablist = page.getByRole('tablist', { name: '出発駅' })
+    await expect(tablist).toBeVisible()
+    await expect(tablist.getByRole('tab')).toHaveCount(4)
+    await expect(page.locator('[aria-pressed]')).toHaveCount(0)
+
+    await expect(tab(page, KAMIYACHO)).toHaveAttribute('aria-selected', 'true')
+    await expect(tab(page, KAMIYACHO)).toHaveAttribute('tabindex', '0')
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'false')
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('tabindex', '-1')
+
+    await expect(tab(page, KAMIYACHO)).toContainText('19:30着')
+    await expect(tab(page, KAMIYACHO)).toContainText('最速')
+    await expect(tab(page, ROPPONGI)).toContainText('19:38着')
+    await expect(tab(page, ROPPONGI)).toContainText('+8分')
+    await expect(tab(page, AZABU)).toContainText('取得できず')
+    await expect(tab(page, TAMEIKE)).toContainText('便なし')
+
+    const panel = page.getByRole('tabpanel')
+    await expect(panel).toHaveAttribute('aria-labelledby', (await tab(page, KAMIYACHO).getAttribute('id'))!)
+    await expect(panel).toContainText(`${KAMIYACHO}`)
+    await expect(panel).toContainText('オフィスから徒歩7分 · 到着が早い順')
+  })
+
+  test('moves selection and focus with the arrow keys, Home and End', async ({ page }) => {
+    await page.goto('/')
+    await expect(tab(page, KAMIYACHO)).toHaveAttribute('aria-selected', 'true')
+
+    await tab(page, KAMIYACHO).focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(tab(page, AZABU)).toHaveAttribute('aria-selected', 'true')
+    await expect(tab(page, AZABU)).toBeFocused()
+
+    await page.keyboard.press('End')
+    await expect(tab(page, TAMEIKE)).toBeFocused()
+    await page.keyboard.press('ArrowRight')
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'true')
+    await expect(tab(page, ROPPONGI)).toBeFocused()
+    await expect(page.getByText('18:49')).toBeVisible()
+
+    await page.keyboard.press('ArrowLeft')
+    await expect(tab(page, TAMEIKE)).toBeFocused()
+    await page.keyboard.press('Home')
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'true')
+    await expect(tab(page, ROPPONGI)).toBeFocused()
+  })
+
+  test('every station tab answers over at least 44x44', async ({ page }) => {
+    await page.goto('/')
+
+    const tabs = page.getByRole('tab')
+    await expect(tabs).toHaveCount(4)
+    for (const target of await tabs.all()) {
+      const hit = await interactiveBox(target)
+      expect(hit.width).toBeGreaterThanOrEqual(44)
+      expect(hit.height).toBeGreaterThanOrEqual(44)
+    }
+  })
+
+  test('keeps document.title on the active origin and its fastest departure', async ({ page }) => {
+    await page.goto('/')
+
+    await expect(page).toHaveTitle('神谷町 → つつじヶ丘 · 18:52発')
+    await tab(page, ROPPONGI).click()
+    await expect(page).toHaveTitle('六本木一丁目 → つつじヶ丘 · 18:49発')
+    await tab(page, AZABU).click()
+    await expect(page).toHaveTitle('麻布十番 → つつじヶ丘')
+  })
+
+  test('holds a manual pick through a failed refresh and re-selects the fastest on the next success', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await tab(page, ROPPONGI).click()
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'true')
+
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await mockApi(page, { transitStatus: 500, transit: { message: 'boom' } })
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'true')
+
+    // The release keys off a new lastUpdated; page.clock.install leaves time running, so the
+    // second successful fetch lands at a later instant than the first.
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await mockApi(page, { transit: STATION_PAYLOAD })
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(tab(page, KAMIYACHO)).toHaveAttribute('aria-selected', 'true')
   })
 })

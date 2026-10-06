@@ -6,7 +6,7 @@ import styles from './TransitCard.module.css'
 
 interface TransitCardProps {
   route: TransitRoute
-  /** True on the earliest departure (derived from the data in App, never from card position). */
+  /** True on the origin's earliest-arriving candidate (the server's `isFastest`, never a card position). */
   isNext: boolean
 }
 
@@ -23,7 +23,7 @@ export function TransitCard({ route, isNext }: TransitCardProps) {
       >
         {/* The keyline is a pseudo-element, invisible to assistive tech; this text is the
             marker's accessible equivalent. Global utility class, so no styles[...] here. */}
-        {isNext && <span className="visually-hidden">Next departure </span>}
+        {isNext && <span className="visually-hidden">最速の便 </span>}
         <div className={styles.times}>
           <span className={styles.departure}>{summary.departureTime}</span>
           <span className={styles.arrow}>→</span>

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import type { OriginRoute } from '../src/types/transit'
+import type { Candidate, OriginResult, OriginRoute } from '../src/types/transit'
 import cardStyles from '../src/components/TransitCard.module.css'
 
 /**
@@ -27,6 +27,8 @@ import App from '../src/App'
 
 type TransitState = {
   originRoutes: OriginRoute[]
+  origins: OriginResult[]
+  fastestOrigin: string | null
   loading: boolean
   error: string | null
   lastUpdated: Date | null
@@ -36,6 +38,9 @@ type TransitState = {
 function mockTransit(state: Partial<TransitState> = {}) {
   useTransit.mockReturnValue({
     originRoutes: [],
+    origins: [],
+    generatedAt: null,
+    fastestOrigin: null,
     loading: false,
     error: null,
     lastUpdated: new Date('2026-07-13T09:00:00Z'),
@@ -213,37 +218,259 @@ describe('App accessibility affordances', () => {
     expect(screen.getByRole('button', { name: 'Refresh' }).getAttribute('aria-busy')).toBe('false')
   })
 
-  it('exposes tab selection through aria-pressed', () => {
+})
+
+/** Structured-origin fixtures (ADR 0006 D-2). Clock times are JST on 2026-10-07. */
+const at = (hhmm: string) => `2026-10-07T${hhmm}:00+09:00`
+
+function candidate(departure: string, arrival: string, isFastest = false): Candidate {
+  const station = (name: string) => ({
+    station: name,
+    arrivalPlatform: null,
+    departurePlatform: null,
+    transferMinutes: null,
+    waitMinutes: null,
+    noAlight: false,
+  })
+  return {
+    departureAt: at(departure),
+    arrivalAt: at(arrival),
+    durationMinutes: 45,
+    transferCount: 1,
+    isFastest,
+    isFewestTransfers: isFastest,
+    stops: [station('六本木一丁目'), station('つつじヶ丘')],
+    legs: [
+      {
+        lineName: '東京メトロ南北線',
+        lineCode: 'N',
+        trainType: null,
+        via: null,
+        destination: null,
+        departAt: at(departure),
+        arriveAt: at(arrival),
+        minutes: 45,
+        distanceKm: null,
+        carPosition: null,
+      },
+    ],
+  }
+}
+
+function originResult(
+  origin: string,
+  candidates: Candidate[],
+  status: OriginResult['status'] = candidates.length > 0 ? 'ok' : 'no_candidates',
+  walkMinutes = 4
+): OriginResult {
+  return { origin, walkMinutes, searchedFrom: at('18:44'), status, candidates }
+}
+
+const ROPPONGI = '六本木一丁目'
+const KAMIYACHO = '神谷町'
+const AZABU = '麻布十番'
+
+/** 神谷町 arrives first (19:30), 六本木一丁目 8 minutes later, 麻布十番 failed. */
+const ORIGINS: OriginResult[] = [
+  originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+  originResult(KAMIYACHO, [candidate('18:52', '19:30', true)], 'ok', 7),
+  originResult(AZABU, [], 'error', 11),
+]
+
+const tab = (name: string) => screen.getByRole('tab', { name: new RegExp(name) })
+
+describe('station tabs (issue #122, ADR 0007 D-2)', () => {
+  const ORIGINAL_TITLE = 'Transit - 六本木一丁目 → つつじヶ丘'
+
+  beforeEach(() => {
+    // Pin the clock: nothing on this path may depend on the wall clock or the runtime time zone.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(at('18:40')) })
+    document.title = ORIGINAL_TITLE
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('renders the origins as a tablist with aria-selected and a roving tabindex, not aria-pressed', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO })
+    const { container } = render(<App />)
+
+    expect(screen.getByRole('tablist', { name: '出発駅' })).toBeDefined()
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(3)
+    expect(tabs.map(t => t.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false'])
+    expect(tabs.map(t => t.getAttribute('tabindex'))).toEqual(['-1', '0', '-1'])
+    expect(container.querySelector('[aria-pressed]')).toBeNull()
+
+    const panel = screen.getByRole('tabpanel')
+    expect(panel.getAttribute('aria-labelledby')).toBe(tab(KAMIYACHO).id)
+    expect(tabs.every(t => t.getAttribute('aria-controls') === panel.id)).toBe(true)
+  })
+
+  it('auto-selects fastestOrigin, not the first origin', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO })
+    render(<App />)
+
+    expect(tab(KAMIYACHO).getAttribute('aria-selected')).toBe('true')
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('false')
+    expect(screen.getByText('18:52')).toBeDefined()
+  })
+
+  it('selects the first origin when fastestOrigin is null', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: null })
+    render(<App />)
+
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('summarises each tab: HH:MM着 + 最速 / +N分, 取得できず on error, 便なし on no_candidates', () => {
     mockTransit({
-      originRoutes: [
-        ...routes,
-        { origin: '東京', destination: 'つつじヶ丘', transfers: [] },
-      ],
+      origins: [...ORIGINS, originResult('溜池山王', [], 'no_candidates')],
+      fastestOrigin: KAMIYACHO,
     })
     render(<App />)
 
-    expect(screen.getByRole('button', { name: '六本木一丁目' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: '東京' }).getAttribute('aria-pressed')).toBe('false')
+    expect(tab(KAMIYACHO).textContent).toBe(`${KAMIYACHO}19:30着 最速`)
+    expect(tab(ROPPONGI).textContent).toBe(`${ROPPONGI}19:38着 +8分`)
+    expect(tab(AZABU).textContent).toBe(`${AZABU}取得できず`)
+    expect(tab('溜池山王').textContent).toBe('溜池山王便なし')
+  })
+
+  it('holds a manual pick until the next successful fetch, which re-selects the fastest origin', () => {
+    const fetched = new Date(at('18:40'))
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched })
+    const { rerender } = render(<App />)
+
+    fireEvent.click(tab(ROPPONGI))
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+
+    // A refetch in flight and then a failed one keep lastUpdated, so the pick holds.
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched, loading: true })
+    rerender(<App />)
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched, error: RAW_ERROR })
+    rerender(<App />)
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+
+    // The next successful fetch moves lastUpdated and releases the pick.
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: new Date(at('18:41')) })
+    rerender(<App />)
+    expect(tab(KAMIYACHO).getAttribute('aria-selected')).toBe('true')
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('moves selection and focus with the arrow keys, wrapping, plus Home and End', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: ROPPONGI })
+    render(<App />)
+    const selected = () => screen.getAllByRole('tab').find(t => t.getAttribute('aria-selected') === 'true')
+
+    tab(ROPPONGI).focus()
+    fireEvent.keyDown(tab(ROPPONGI), { key: 'ArrowRight' })
+    expect(selected()).toBe(tab(KAMIYACHO))
+    expect(document.activeElement).toBe(tab(KAMIYACHO))
+
+    fireEvent.keyDown(tab(KAMIYACHO), { key: 'End' })
+    expect(selected()).toBe(tab(AZABU))
+    fireEvent.keyDown(tab(AZABU), { key: 'ArrowRight' })
+    expect(selected()).toBe(tab(ROPPONGI))
+    fireEvent.keyDown(tab(ROPPONGI), { key: 'ArrowLeft' })
+    expect(selected()).toBe(tab(AZABU))
+    expect(document.activeElement).toBe(tab(AZABU))
+    fireEvent.keyDown(tab(AZABU), { key: 'Home' })
+    expect(selected()).toBe(tab(ROPPONGI))
+    expect(tab(ROPPONGI).getAttribute('tabindex')).toBe('0')
+  })
+
+  it('leaves modified arrow keys (e.g. Alt+ArrowLeft, browser Back) to the browser', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: ROPPONGI })
+    render(<App />)
+
+    for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey']) {
+      const notCancelled = fireEvent.keyDown(tab(ROPPONGI), { key: 'ArrowLeft', [modifier]: true })
+      expect(notCancelled).toBe(true)
+      expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+    }
+  })
+
+  it('titles the page after the active origin and its fastest departure, and restores it on unmount', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO })
+    const { unmount } = render(<App />)
+    expect(document.title).toBe('神谷町 → つつじヶ丘 · 18:52発')
+
+    fireEvent.click(tab(ROPPONGI))
+    expect(document.title).toBe('六本木一丁目 → つつじヶ丘 · 18:49発')
+
+    // An origin with no candidate names no departure time.
+    fireEvent.click(tab(AZABU))
+    expect(document.title).toBe('麻布十番 → つつじヶ丘')
+
+    unmount()
+    expect(document.title).toBe(ORIGINAL_TITLE)
+  })
+
+  it('leaves the title alone before any origin has loaded', () => {
+    mockTransit({ lastUpdated: null, loading: true })
+    render(<App />)
+
+    expect(document.title).toBe(ORIGINAL_TITLE)
+  })
+
+  it('shows the context line for the active origin', () => {
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO })
+    render(<App />)
+
+    expect(screen.getByText('オフィスから徒歩7分 · 到着が早い順')).toBeDefined()
+    fireEvent.click(tab(ROPPONGI))
+    expect(screen.getByText('オフィスから徒歩4分 · 到着が早い順')).toBeDefined()
+  })
+
+  it('names the active origin\'s own outcome in the empty card and drops the ordering note', () => {
+    mockTransit({ origins: [...ORIGINS, originResult('溜池山王', [], 'no_candidates')], fastestOrigin: KAMIYACHO })
+    render(<App />)
+
+    fireEvent.click(tab(AZABU))
+    expect(screen.getByRole('status').textContent).toBe('取得できず')
+    expect(screen.queryByText(/到着が早い順/)).toBeNull()
+
+    fireEvent.click(tab('溜池山王'))
+    expect(screen.getByRole('status').textContent).toBe('便なし')
+    expect(screen.queryByText(EMPTY)).toBeNull()
+  })
+
+  it('keeps a card-less tab\'s outcome, not the first-load spinner, while a refresh is in flight', () => {
+    const fetched = new Date(at('18:40'))
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched })
+    const { rerender } = render(<App />)
+    fireEvent.click(tab(AZABU))
+
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched, loading: true })
+    rerender(<App />)
+    expect(screen.queryByText(LOADING)).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('取得できず')
+
+    // A failed refresh still dates the data the other tabs show.
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO, lastUpdated: fetched, error: RAW_ERROR })
+    rerender(<App />)
+    expect(screen.getByRole('alert').textContent).toContain('表示中は 18:40 時点のデータです')
+  })
+
+  it('falls back to the legacy origins, without summaries, when the structured field is absent', () => {
+    mockTransit({ originRoutes: routes })
+    render(<App />)
+
+    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
+    expect(tab(ROPPONGI).textContent).toBe(ROPPONGI)
+    expect(screen.getByText('18:49')).toBeDefined()
+    expect(screen.queryByText(/到着が早い順/)).toBeNull()
   })
 })
 
 /**
- * The next-departure marker (issue #97, ADR 0004 D-3). The backend slices Jorudan's candidates
- * with no sort and Jorudan ranks by route quality, so "card index 0" does NOT mean "soonest" -
- * these tests pin the marker to the departure-time data, and the first test below is the one
- * that kills a regression back to `index === 0` (which every position-based test would miss).
+ * The fastest-arrival marker (ADR 0006 D-4 amends ADR 0004 D-3): the keyline marks the server's
+ * per-origin `isFastest` candidate - still derived from data, never from card position.
  */
-describe('next-departure marker', () => {
-  const ROUTE_BODY = '■六本木一丁目\n｜東京メトロ南北線'
-
-  function transfer(summary: string) {
-    return { summary, route: ROUTE_BODY }
-  }
-
-  function origin(name: string, summaries: string[]): OriginRoute {
-    return { origin: name, destination: 'つつじヶ丘', transfers: summaries.map(transfer) }
-  }
-
+describe('fastest-arrival marker', () => {
   /** The visible marker: cards carrying the .cardNext keyline modifier. */
   function markedCards(container: HTMLElement): Element[] {
     return [...container.querySelectorAll(`.${cardStyles.cardNext}`)]
@@ -251,129 +478,72 @@ describe('next-departure marker', () => {
 
   /** The accessible marker: the visually-hidden text equivalent of the keyline. */
   function markerLabels(): HTMLElement[] {
-    return screen.queryAllByText(/Next departure/)
+    return screen.queryAllByText(/最速の便/)
   }
 
-  it('marks the earliest departure, not the first card, when Jorudan ranks a later train first', () => {
+  it('marks the isFastest candidate, not the first card', () => {
     mockTransit({
-      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
+      origins: [originResult(ROPPONGI, [candidate('18:40', '19:45'), candidate('18:49', '19:38', true)])],
+      fastestOrigin: ROPPONGI,
     })
     const { container } = render(<App />)
 
     const marked = markedCards(container)
     expect(marked).toHaveLength(1)
     expect(marked[0].textContent).toContain('18:49')
-    expect(marked[0].textContent).not.toContain('19:04')
-  })
-
-  it('marks exactly one card whenever at least one card renders', () => {
-    mockTransit({ originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)'])] })
-    const single = render(<App />)
-    expect(markedCards(single.container)).toHaveLength(1)
-    single.unmount()
-
-    mockTransit({
-      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
-    })
-    const double = render(<App />)
-    expect(markedCards(double.container)).toHaveLength(1)
+    expect(marked[0].textContent).not.toContain('18:40')
     expect(markerLabels()).toHaveLength(1)
   })
 
-  it('marks the first card on a departure-time tie', () => {
-    mockTransit({
-      originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', '18:49発 → 19:45着(56分)(0回)'])],
-    })
-    const { container } = render(<App />)
-
-    const marked = markedCards(container)
-    expect(marked).toHaveLength(1)
-    expect(marked[0].textContent).toContain('19:38')
-  })
-
-  it('marks nothing when any departure time failed to parse', () => {
-    // A string compare would put '--:--' before every digit and falsely win; the guard
-    // must drop the marker entirely instead.
-    mockTransit({
-      originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', 'no parsable times here'])],
-    })
-    const { container } = render(<App />)
-
-    expect(markedCards(container)).toHaveLength(0)
-    expect(markerLabels()).toHaveLength(0)
-  })
-
-  it('marks nothing when the times are more than 6 hours apart (suspected midnight wrap)', () => {
-    mockTransit({
-      originRoutes: [origin('六本木一丁目', ['23:58発 → 0:45着(47分)(1回)', '0:12発 → 0:58着(46分)(1回)'])],
-    })
-    const { container } = render(<App />)
-
-    expect(markedCards(container)).toHaveLength(0)
-    expect(markerLabels()).toHaveLength(0)
-  })
-
-  it('marks nothing in the empty and error states', () => {
-    mockTransit()
-    const empty = render(<App />)
-    expect(markedCards(empty.container)).toHaveLength(0)
-    expect(markerLabels()).toHaveLength(0)
-    empty.unmount()
-
-    mockTransit({ error: RAW_ERROR })
-    const errored = render(<App />)
-    expect(markedCards(errored.container)).toHaveLength(0)
-    expect(markerLabels()).toHaveLength(0)
-  })
-
   it('gives the marker a text equivalent inside the marked card header', () => {
-    mockTransit({ originRoutes: [origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)'])] })
+    mockTransit({ origins: ORIGINS, fastestOrigin: KAMIYACHO })
     render(<App />)
 
     // The keyline is a pseudo-element, invisible to assistive tech; the hidden text is what
     // reaches a screen reader, so it must live in the header button's accessible name.
-    const header = screen.getByRole('button', { name: /Next departure/ })
-    expect(header.textContent).toContain('18:49')
+    const header = screen.getByRole('button', { name: /最速の便/ })
+    expect(header.textContent).toContain('18:52')
     expect(header.querySelector('.visually-hidden')).not.toBeNull()
   })
 
+  it('marks nothing on the legacy fallback, in the empty state, or on a failed origin', () => {
+    mockTransit({ originRoutes: routes })
+    const legacy = render(<App />)
+    expect(markedCards(legacy.container)).toHaveLength(0)
+    legacy.unmount()
+
+    mockTransit()
+    const empty = render(<App />)
+    expect(markedCards(empty.container)).toHaveLength(0)
+    empty.unmount()
+
+    mockTransit({ origins: [originResult(AZABU, [], 'error')], fastestOrigin: null })
+    const failed = render(<App />)
+    expect(markedCards(failed.container)).toHaveLength(0)
+    expect(markerLabels()).toHaveLength(0)
+  })
+
   it('keeps the expanded card and the marker on the same train after a tab switch', () => {
-    // Tab A's marker sits at index 0, tab B's at index 1. React reuses component instances
-    // by key, so with a positional key (key={index}) tab A's expansion state would survive
-    // the switch on card 0 while the marker moves to card 1 - this test goes red if the
-    // key ever reverts to the index.
+    // 六本木一丁目's marker sits at index 0, 神谷町's at index 1. React reuses component
+    // instances by key, so with a positional key (key={index}) the first tab's expansion state
+    // would survive the switch on card 0 while the marker moves to card 1.
     mockTransit({
-      originRoutes: [
-        origin('六本木一丁目', ['18:49発 → 19:38着(49分)(1回)', '19:04発 → 19:52着(48分)(1回)']),
-        origin('東京', ['19:10発 → 19:58着(48分)(1回)', '18:55発 → 19:40着(45分)(1回)']),
+      origins: [
+        originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+        originResult(KAMIYACHO, [candidate('18:45', '19:40'), candidate('18:55', '19:39', true)]),
       ],
+      fastestOrigin: ROPPONGI,
     })
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: '東京' }))
+    fireEvent.click(tab(KAMIYACHO))
 
-    const marked = screen.getByRole('button', { name: /Next departure/ })
+    const marked = screen.getByRole('button', { name: /最速の便/ })
     expect(marked.textContent).toContain('18:55')
     expect(marked.getAttribute('aria-expanded')).toBe('true')
 
-    // The unmarked card remounted collapsed - stale expansion did not leak across the tabs.
     const headers = screen.getAllByRole('button').filter(button => button.hasAttribute('aria-expanded'))
     expect(headers).toHaveLength(2)
-    const unmarked = headers.find(button => button !== marked)
-    expect(unmarked?.getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('expands the marked card by default and collapses the rest', () => {
-    mockTransit({
-      originRoutes: [origin('六本木一丁目', ['19:04発 → 19:52着(48分)(1回)', '18:49発 → 19:38着(49分)(1回)'])],
-    })
-    render(<App />)
-
-    const marked = screen.getByRole('button', { name: /Next departure/ })
-    expect(marked.textContent).toContain('18:49')
-    expect(marked.getAttribute('aria-expanded')).toBe('true')
-
-    const headers = screen.getAllByRole('button').filter(button => button.hasAttribute('aria-expanded'))
     const unmarked = headers.find(button => button !== marked)
     expect(unmarked?.getAttribute('aria-expanded')).toBe('false')
   })

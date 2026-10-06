@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { isValidStructuredTransit, STRUCTURED_LIMITS, LINE_CODES } from '../src/types/transit'
+import {
+  isValidStructuredTransit,
+  candidateToRoute,
+  parseRoute,
+  parseSummary,
+  STRUCTURED_LIMITS,
+  LINE_CODES,
+  type Candidate,
+} from '../src/types/transit'
 import { useTransit } from '../src/hooks/useTransit'
 
 const stop = (station: string) => ({
@@ -179,5 +187,40 @@ describe('useTransit structured fields', () => {
     expect(result.current.fastestOrigin).toBeNull()
     expect(result.current.originRoutes).toHaveLength(1)
     expect(result.current.error).toBeNull()
+  })
+})
+
+describe('candidateToRoute', () => {
+  it('writes a candidate in the legacy summary/route shape that parseSummary and parseRoute read back', () => {
+    const c = {
+      ...candidate(),
+      durationMinutes: 52,
+      transferCount: 1,
+      stops: [stop('六本木一丁目'), stop('市ケ谷'), stop('つつじヶ丘')],
+      legs: [leg('N'), { ...leg('S'), lineName: '都営新宿線' }],
+    }
+    const { summary, route } = candidateToRoute(c as Candidate)
+
+    expect(summary).toBe('20:45発 → 20:51着(52分)(1回)')
+    expect(parseSummary(summary)).toEqual({
+      departureTime: '20:45',
+      arrivalTime: '20:51',
+      duration: '52分',
+      transfers: '1回',
+    })
+    expect(parseRoute(route)).toEqual([
+      { station: '六本木一丁目', line: '東京メトロ南北線', isTerminal: true },
+      { station: '市ケ谷', line: '都営新宿線', isTerminal: false },
+      { station: 'つつじヶ丘', line: null, isTerminal: true },
+    ])
+  })
+
+  it.each([
+    [59, '59分'],
+    [60, '1時間'],
+    [75, '1時間15分'],
+  ])('spells %i minutes the way Jorudan does (%s)', (durationMinutes, expected) => {
+    const { summary } = candidateToRoute({ ...candidate(), durationMinutes } as Candidate)
+    expect(parseSummary(summary).duration).toBe(expected)
   })
 })
