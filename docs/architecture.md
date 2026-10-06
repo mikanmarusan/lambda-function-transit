@@ -26,6 +26,7 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Module | Responsibility | Source path |
 | --- | --- | --- |
 | `handler(event, context)` | Entry point; normalizes the request path, orchestrates the cookie flow across origins, parses the results HTML, and returns the JSON response | `src/index.mjs` |
+| `buildSearchUrl()` / `buildDepartureParams()` | Build each origin's `nori.cgi` search URL per request, appending the JST departure date/time (`Dym`/`Ddd`/`Dhh`/`Dmn`) for "now + that origin's `walkMinutes`" (see §5 Jorudan Search Request) | `src/index.mjs` |
 | `performBotHandshake()` | Emulates the browser bot-check flow for each origin, with one `CookieJar` and one overall timeout budget per call | `src/index.mjs` |
 | `extractJsRedirect()` | Reads the (single- or double-quoted) `window.location.href` from the JS redirect stub, using a non-backtracking negated character class | `src/index.mjs` |
 | `splitRoutes()` | Splits the target HTML block on the `(?=発着時間：)` lookahead to separate individual route candidates | `src/index.mjs` |
@@ -75,13 +76,28 @@ The Lambda handler accepts paths from both direct API Gateway invocations and Cl
 
 This lets the dev server (which exposes the unprefixed paths) and CloudFront (which prefixes with `/api`) hit the same handler without per-environment branching.
 
+### Jorudan Search Request — Departure Time per Origin
+
+`JORUDAN_ORIGINS` in `src/index.mjs` is the origin config: each entry holds the station name and its `walkMinutes` (六本木一丁目 4, 神谷町 7, 麻布十番 11 — placeholder values kept in that one place). The destination is fixed to つつじヶ丘（東京）.
+
+On every `/transit` request the handler reads the current instant once and, for each origin, `buildSearchUrl()` builds the `nori.cgi` search URL: the percent-encoded origin as `eki1`, the fixed query string (including `Cway=0`, depart-at mode), then the departure date/time from `buildDepartureParams()`:
+
+| Param | Meaning | Example (JST 2026-10-01 11:51, walk 11 min) |
+| --- | --- | --- |
+| `Dym` | Year and zero-padded month, `YYYYMM` | `202610` |
+| `Ddd` | Day of month, no padding | `1` |
+| `Dhh` | Hour `0`–`23`, no padding | `12` |
+| `Dmn` | Minute `0`–`59`, no padding | `2` |
+
+The departure time is "JST now + `walkMinutes`", so Jorudan is asked for departures at or after the time the rider can reach that station. JST is computed explicitly with `Intl.DateTimeFormat` (`timeZone: 'Asia/Tokyo'`, `hourCycle: 'h23'`) because Lambda runs in UTC; adding the walk minutes to the instant before formatting carries day, month and year rollover (e.g. 2026-12-31 23:55 + 11 min → `Dym=202701&Ddd=1&Dhh=0&Dmn=6`). The parameters are built server-side from numbers only; nothing in the request feeds them. The response shape is unchanged.
+
 ### Jorudan Bot Detection — 6-Hop `jrd_uuid` Cookie Handshake
 
 Jorudan fronts its site with CloudFront and a JavaScript-based bot check. A naive `fetch()` against the search URL receives an HTML stub instead of the transit results page, because the real URL is computed client-side and gated behind a UUID-cookie handshake performed on a **separate subdomain** (`jid.jorudan.co.jp`).
 
 `performBotHandshake()` in `src/index.mjs` emulates the browser flow for each origin (one `CookieJar` and one overall budget per call):
 
-1. **Initial request** — GET the `nori.cgi` search URL on `www.jorudan.co.jp`. The body is a JS redirect page; `extractJsRedirect()` reads the (single- or double-quoted) `window.location.href`, which is now an **absolute cross-host URL** to `https://jid.jorudan.co.jp/jrd_uuid/?returl=...`. (Fast-path: if this first response already contains the results marker `<hr size="1"`, it is returned directly.)
+1. **Initial request** — GET the `nori.cgi` search URL (built per request as above) on `www.jorudan.co.jp`. The body is a JS redirect page; `extractJsRedirect()` reads the (single- or double-quoted) `window.location.href`, which is now an **absolute cross-host URL** to `https://jid.jorudan.co.jp/jrd_uuid/?returl=...`. (Fast-path: if this first response already contains the results marker `<hr size="1"`, it is returned directly.)
 2. **jid page** — GET the `jrd_uuid` page on `jid.jorudan.co.jp`. In a real browser its inline JS drives the next two AJAX calls; the handler derives those URLs directly from this page URL's querystring.
 3. **set_uuid** — **POST** `jid.../jrd_uuid/set_uuid.cgi?<returl...>&ts=<epoch>` with browser-`fetch()`-equivalent AJAX headers (`Accept: */*`, `Referer` = the jid **origin root** `https://jid.jorudan.co.jp/`, `Sec-Fetch-Site: same-origin`, `Content-Type: application/x-www-form-urlencoded;charset=UTF-8`) and a urlencoded browser-fingerprint body (`tz, lang, sw, sh, cd, mem, hc, ua, ts`). A bare **GET** (or a POST missing the fingerprint body/headers) returns **403** (`./error.html`). Responds with `Set-Cookie jrd_cuid` (`Domain=jid.jorudan.co.jp`, short `max-age`).
 4. **verify_uuid** — **POST** `jid.../jrd_uuid/verify_uuid.cgi?<returl...>&ts=<epoch>` with the same AJAX headers, fingerprint body, and the `jrd_cuid` cookie. The **response body is the plaintext final URL** (`https://www.jorudan.co.jp/webuser/redirect2.cgi?url=...`) and it sets `Set-Cookie jrd_uuid` with `Domain=.jorudan.co.jp` (shared across subdomains). `jrd_uuid` is the sole gating cookie — once set, the final `nori.cgi` renders directly, so a single `set_uuid → verify_uuid` pair is sufficient (no second `set_uuid` is required).
