@@ -45,6 +45,10 @@
   /* Translucent washes for the error banner: alpha hex over the page ground (--bg-primary). */
   --accent-red-tint: var(--color-accent-red-tint);
   --accent-red-tint-border: var(--color-accent-red-tint-border);
+  /* Stale-data pill (ADR 0008 D-4): amber text on an alpha wash over the header ground. */
+  --accent-amber: var(--color-accent-amber);
+  --accent-amber-tint: var(--color-accent-amber-tint);
+  --accent-amber-tint-border: var(--color-accent-amber-tint-border);
 
   /* 2a. Aliases - Font size scale (call sites use --font-size-*, never --text-* sizes) */
   --font-size-xs: var(--text-xs);

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
+import { STALE_AFTER_MS, formatClockTime, isStale, minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
 
 const DEPARTURE = '2026-10-06T20:45:00+09:00'
 const WALK = 4
@@ -91,5 +91,33 @@ describe('time zone independence', () => {
     const utc = sampleResults()
     expect(utc).toEqual(tokyo)
     expect(utc).toEqual({ leave: [1, 0, -1, 8], labels: ['0秒前', '59秒前', '1分前'] })
+  })
+})
+
+describe('isStale (ADR 0007 D-2: stale at 180 s or older)', () => {
+  const UPDATED = Date.parse('2026-10-06T20:41:00+09:00')
+
+  it('pins the threshold at 180 s', () => {
+    expect(STALE_AFTER_MS).toBe(180 * SEC)
+  })
+
+  it('is fresh at 179 s and stale from exactly 180 s on', () => {
+    expect(isStale(UPDATED, UPDATED + 179 * SEC)).toBe(false)
+    expect(isStale(UPDATED, UPDATED + 180 * SEC - 1)).toBe(false)
+    expect(isStale(UPDATED, UPDATED + 180 * SEC)).toBe(true)
+    expect(isStale(UPDATED, UPDATED + 3600 * SEC)).toBe(true)
+  })
+
+  it('is never stale on clock skew or a non-finite input', () => {
+    expect(isStale(UPDATED, UPDATED - 600 * SEC)).toBe(false)
+    expect(isStale(Number.NaN, UPDATED)).toBe(false)
+    expect(isStale(UPDATED, Number.POSITIVE_INFINITY)).toBe(false)
+  })
+})
+
+describe('formatClockTime', () => {
+  it('formats JST HH:MM regardless of the runtime time zone', () => {
+    expect(formatClockTime(Date.parse('2026-07-13T09:00:00Z'))).toBe('18:00')
+    expect(formatClockTime(Date.parse('2026-07-13T15:05:00Z'))).toBe('00:05')
   })
 })
