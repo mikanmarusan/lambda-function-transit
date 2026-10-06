@@ -7,17 +7,55 @@ const JORUDAN_BASE_URL = 'https://www.jorudan.co.jp';
 const JORUDAN_URL_PREFIX = `${JORUDAN_BASE_URL}/norikae/cgi/nori.cgi?rf=top&eok1=R-&eok2=R-&pg=0&eki1=`;
 const JORUDAN_URL_SUFFIX = '&Cmap1=&eki2=%E3%81%A4%E3%81%A4%E3%81%98%E3%83%B6%E4%B8%98%EF%BC%88%E6%9D%B1%E4%BA%AC%EF%BC%89&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t';
 const JORUDAN_DESTINATION = 'つつじヶ丘（東京）';
+// Walk minutes from the office to each origin station (placeholder values; tune here only).
+// Each search starts from "JST now + walkMinutes" so every returned candidate is catchable.
 const JORUDAN_ORIGINS = [
-  { origin: '六本木一丁目', url: `${JORUDAN_URL_PREFIX}%E5%85%AD%E6%9C%AC%E6%9C%A8%E4%B8%80%E4%B8%81%E7%9B%AE${JORUDAN_URL_SUFFIX}` },
-  { origin: '神谷町',       url: `${JORUDAN_URL_PREFIX}%E7%A5%9E%E8%B0%B7%E7%94%BA${JORUDAN_URL_SUFFIX}` },
-  { origin: '麻布十番',     url: `${JORUDAN_URL_PREFIX}%E9%BA%BB%E5%B8%83%E5%8D%81%E7%95%AA${JORUDAN_URL_SUFFIX}` },
+  { origin: '六本木一丁目', walkMinutes: 4 },
+  { origin: '神谷町',       walkMinutes: 7 },
+  { origin: '麻布十番',     walkMinutes: 11 },
 ];
+// Lambda runs in UTC, so JST is computed explicitly rather than from the process time zone.
+const JST_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h23',
+});
 const PER_HOP_TIMEOUT_MS = 2500;   // per-fetch timeout for a single hop
 const OVERALL_BUDGET_MS = 7000;    // total budget for one origin's full handshake
 const ALLOWED_HOSTS = new Set(['www.jorudan.co.jp', 'jid.jorudan.co.jp']);
 const MIN_EXPECTED_BLOCKS = 3;
 const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
 const MAX_CANDIDATES = 2;  // Maximum number of transit candidates to return
+
+/**
+ * Build Jorudan's departure date/time query parameters for "now + walkMinutes" in JST.
+ * Built from numbers only; never from request input.
+ * @param {Date} now - Current instant
+ * @param {number} walkMinutes - Minutes to walk to the origin station
+ * @returns {string} `Dym=YYYYMM&Ddd=D&Dhh=H&Dmn=M`
+ */
+export function buildDepartureParams(now, walkMinutes) {
+  const departure = new Date(now.getTime() + walkMinutes * 60_000);
+  const parts = Object.fromEntries(
+    JST_FORMATTER.formatToParts(departure).map(({ type, value }) => [type, value])
+  );
+  return `Dym=${parts.year}${parts.month}&Ddd=${Number(parts.day)}&Dhh=${Number(parts.hour)}&Dmn=${Number(parts.minute)}`;
+}
+
+/**
+ * Build the Jorudan search URL for one origin, departing at JST now + walkMinutes.
+ * @param {string} origin - Origin station name
+ * @param {number} walkMinutes - Minutes to walk to the origin station
+ * @param {Date} now - Current instant
+ * @returns {string} Search URL
+ */
+export function buildSearchUrl(origin, walkMinutes, now) {
+  return `${JORUDAN_URL_PREFIX}${encodeURIComponent(origin)}${JORUDAN_URL_SUFFIX}&${buildDepartureParams(now, walkMinutes)}`;
+}
 
 /**
  * Escape special regex characters in a string
@@ -388,9 +426,10 @@ export async function handler(event, _context) {
   }
 
   try {
+    const now = new Date();
     const results = await Promise.allSettled(
-      JORUDAN_ORIGINS.map(({ origin, url }) =>
-        performBotHandshake(url).then(body => {
+      JORUDAN_ORIGINS.map(({ origin, walkMinutes }) =>
+        performBotHandshake(buildSearchUrl(origin, walkMinutes, now)).then(body => {
           const blocks = body.split(/<hr size="1" color="black"\s*\/?>/i);
           if (blocks.length < MIN_EXPECTED_BLOCKS) {
             throw new Error(`Unexpected HTML structure: insufficient blocks (got ${blocks.length})`);

@@ -1,6 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { getSummary, getRoute, splitRoutes, handler, extractJsRedirect, isAllowedUrl } from '../src/index.mjs';
+import { execFileSync } from 'node:child_process';
+import { getSummary, getRoute, splitRoutes, handler, extractJsRedirect, isAllowedUrl, buildDepartureParams, buildSearchUrl } from '../src/index.mjs';
 
 // Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
 const mockBlock = `発着時間：06:30～08:45\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
@@ -246,6 +247,50 @@ describe('isAllowedUrl SSRF guard', () => {
   });
 });
 
+describe('buildDepartureParams (JST now + walk minutes)', () => {
+  const CASES = [
+    ['2026-10-01T11:51:00+09:00', 11, 'Dym=202610&Ddd=1&Dhh=12&Dmn=2'],
+    ['2026-10-01T23:55:00+09:00', 11, 'Dym=202610&Ddd=2&Dhh=0&Dmn=6'],
+    ['2026-10-31T23:55:00+09:00', 11, 'Dym=202611&Ddd=1&Dhh=0&Dmn=6'],
+    ['2026-12-31T23:55:00+09:00', 11, 'Dym=202701&Ddd=1&Dhh=0&Dmn=6'],
+    ['2026-10-01T23:49:00+09:00', 11, 'Dym=202610&Ddd=2&Dhh=0&Dmn=0'],
+  ];
+
+  for (const [iso, walk, expected] of CASES) {
+    it(`${iso} + ${walk}min -> ${expected}`, () => {
+      assert.strictEqual(buildDepartureParams(new Date(iso), walk), expected);
+    });
+  }
+
+  it('gives the same results regardless of the process time zone', () => {
+    const moduleUrl = new URL('../src/index.mjs', import.meta.url).href;
+    const script = `
+      const { buildDepartureParams } = await import(${JSON.stringify(moduleUrl)});
+      const cases = ${JSON.stringify(CASES)};
+      process.stdout.write(JSON.stringify(cases.map(([iso, walk]) => buildDepartureParams(new Date(iso), walk))));
+    `;
+    const expected = CASES.map(([, , params]) => params);
+    for (const tz of ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+      const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+        env: { ...process.env, TZ: tz },
+        encoding: 'utf8',
+      });
+      assert.deepStrictEqual(JSON.parse(out), expected, `TZ=${tz}`);
+    }
+  });
+});
+
+describe('buildSearchUrl', () => {
+  it('keeps Cway=0 and appends the JST departure params to the encoded origin URL', () => {
+    const url = buildSearchUrl('麻布十番', 11, new Date('2026-10-01T11:51:00+09:00'));
+    assert.ok(url.startsWith('https://www.jorudan.co.jp/norikae/cgi/nori.cgi?'));
+    assert.ok(url.includes('eki1=%E9%BA%BB%E5%B8%83%E5%8D%81%E7%95%AA&'), 'origin must be percent-encoded');
+    assert.ok(url.includes('&Cway=0&'), 'depart-at mode must be kept');
+    assert.ok(url.endsWith('&Dym=202610&Ddd=1&Dhh=12&Dmn=2'));
+    assert.ok(isAllowedUrl(url, url), 'search URL must pass the SSRF guard');
+  });
+});
+
 describe('handler', () => {
   // Helper to build HTML with route blocks
   function buildHtml(routeContent) {
@@ -293,6 +338,33 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.headers['Content-Type'], 'application/json', 'Should have JSON content type');
     });
+  });
+
+  it('searches each origin from JST now + its walk minutes', async () => {
+    mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-01T11:51:00+09:00') });
+    try {
+      const calls = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock.fn(async (url) => { calls.push(url); return createMockResponse(validHtml); });
+      try {
+        const result = await handler({}, {});
+        assert.strictEqual(result.statusCode, 200);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      const expected = [
+        ['%E5%85%AD%E6%9C%AC%E6%9C%A8%E4%B8%80%E4%B8%81%E7%9B%AE', 'Dym=202610&Ddd=1&Dhh=11&Dmn=55'],
+        ['%E7%A5%9E%E8%B0%B7%E7%94%BA', 'Dym=202610&Ddd=1&Dhh=11&Dmn=58'],
+        ['%E9%BA%BB%E5%B8%83%E5%8D%81%E7%95%AA', 'Dym=202610&Ddd=1&Dhh=12&Dmn=2'],
+      ];
+      for (const [encodedOrigin, params] of expected) {
+        const call = calls.find(u => u.includes(`eki1=${encodedOrigin}&`));
+        assert.ok(call, `origin ${encodedOrigin} should be searched`);
+        assert.ok(call.endsWith(`&Cway=0&Cfp=1&Czu=2&S=%E6%A4%9C%E7%B4%A2&Csg=1&type=t&${params}`), call);
+      }
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it('should reject SSRF attempt via protocol in redirect path', async () => {
