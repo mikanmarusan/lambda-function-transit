@@ -26,6 +26,9 @@ colors:
   accent-red: "#ef4444"
   accent-red-tint: "#ef44441a"
   accent-red-tint-border: "#ef444433"
+  accent-amber: "#f59e0b"
+  accent-amber-tint: "#f59e0b1a"
+  accent-amber-tint-border: "#f59e0b33"
 typography:
   xs:
     fontSize: 11px
@@ -113,22 +116,33 @@ components:
     backgroundColor: "{colors.border-tertiary}"
     height: 1px
   status-indicator:
-    backgroundColor: "{colors.bg-secondary}"
-    textColor: "{colors.text-secondary}"
+    backgroundColor: "{colors.bg-primary}"
+    textColor: "{colors.text-tertiary}"
+    typography: "{typography.xs}"
+  status-indicator-ok:
+    backgroundColor: "{colors.bg-primary}"
+    textColor: "{colors.accent-green}"
+    size: 6px
+  status-indicator-error:
+    backgroundColor: "{colors.bg-primary}"
+    textColor: "{colors.accent-red}"
+    size: 6px
+  status-indicator-loading:
+    backgroundColor: "{colors.bg-primary}"
+    textColor: "{colors.text-tertiary}"
+    size: 6px
+  stale-pill:
+    backgroundColor: "{colors.bg-primary}"
+    textColor: "{colors.accent-amber}"
     typography: "{typography.sm}"
     rounded: "{rounded.md}"
-  status-indicator-ok:
-    backgroundColor: "{colors.bg-secondary}"
-    textColor: "{colors.accent-green}"
-    size: 10px
-  status-indicator-error:
-    backgroundColor: "{colors.bg-secondary}"
-    textColor: "{colors.accent-red}"
-    size: 12px
-  status-indicator-loading:
-    backgroundColor: "{colors.bg-secondary}"
-    textColor: "{colors.text-tertiary}"
-    size: 10px
+    padding: "{spacing.1}"
+  stale-pill-surface:
+    backgroundColor: "{colors.accent-amber-tint}"
+    rounded: "{rounded.md}"
+  stale-pill-border:
+    backgroundColor: "{colors.accent-amber-tint-border}"
+    height: 1px
   error-banner:
     backgroundColor: "{colors.bg-primary}"
     textColor: "{colors.accent-red}"
@@ -194,7 +208,7 @@ components:
 | 区分 | 対象 | 置き場所 |
 |---|---|---|
 | **生成（frontmatter が正）** | 色（`--color-*`。**α付き tint 色を含む**）・font-size 階梯（`--text-xs…2xl`）・weight（`--font-weight-*`）・tracking（`--tracking-*`）・角丸（`--radius-*`）・spacing（`--spacing-*`） | `src/design-tokens.css`（DO NOT EDIT） |
-| **別名（生成物への薄いエイリアス）** | `--bg-*` / `--border-*` / `--text-primary`・`--text-secondary`・`--text-tertiary` / `--accent-*`（`--accent-red-tint` 系を含む） / `--space-1…12` / `--font-size-xs…2xl` | `src/index.css` の別名レイヤ |
+| **別名（生成物への薄いエイリアス）** | `--bg-*` / `--border-*` / `--text-primary`・`--text-secondary`・`--text-tertiary` / `--accent-*`（`--accent-red-tint` 系・`--accent-amber-tint` 系を含む） / `--space-1…12` / `--font-size-xs…2xl` | `src/index.css` の別名レイヤ |
 | **手書き残余（export 表現不可）** | `--font-sans`（CJK 込みの連鎖）・`--font-mono`・`--transition-fast` | `src/index.css` の手書き残余区画（`:root`） |
 | **非トークンの設計値** | `line-height`（`body` と `.rawRoute`）・`font-feature-settings`（**提案のみ・未実装**） | 各 CSS の宣言に直書き（`:root` トークンではない） |
 
@@ -204,13 +218,15 @@ components:
   を使う。**呼び出し側の直書き px は全廃済み**（Tech Debt #2 クローズ。`tests/design-tokens.test.ts` が
   `*.module.css` の `font-size` を階梯別名のみに拘束する）。
 - **α付きの色は export 可能。** `@google/design.md` は 8桁 hex（`#rrggbbaa`）をそのまま通し、`rgba()` 記法も 8桁 hex に
-  正規化する。したがって `.error` の tint は frontmatter の色として持てる（Tech Debt #3 クローズ）。ただし
+  正規化する。したがって `.error` の tint は frontmatter の色として持てる（Tech Debt #3 クローズ。鮮度ピルの `--accent-amber-tint` 系も同じ作法）。ただし
   **lint の contrast チェックは α 非対応**（下地との合成をせず 8桁 hex をそのまま前景色と比較して無意味な 1.00:1 を出す）。
-  そのため α色は `textColor` を持たない**面だけのコンポーネント**（`error-banner-surface` / `error-banner-border`）として
+  そのため α色は `textColor` を持たない**面だけのコンポーネント**（`error-banner-surface` / `error-banner-border`、`stale-pill-surface` / `stale-pill-border`）として
   モデル化し、実効コントラストは Vitest 側（合成してから比率を出す）で担保する。
   なお `components.error-banner.backgroundColor` は `{colors.bg-primary}` を指すが、これは**実際に塗る色ではなく
   「tint の下地」**である（CSS が塗るのは `--accent-red-tint`）。lint の非 α コントラスト検査を意味のある比較に
   するための**モデル**であり、実装事実としての地の色は上の `.error` の記述を正とする。
+  `components.stale-pill.backgroundColor`（`{colors.bg-primary}`）も同じく「tint の下地」＝ヘッダー地のモデルである
+  （CSS が塗るのは `--accent-amber-tint`）。
 
 ### ビジュアルテーマ（Visual Theme）
 
@@ -220,7 +236,7 @@ components:
   `<title>Transit - 六本木一丁目 → つつじヶ丘</title>`。
 - **影を使わない border ベースの奥行き**（詳細は Elevation & Depth）。背景4段とボーダー4段で階層を表現する。
 - **4px グリッド**（`--space-*`、Layout）。**最大幅 600px の単一カラム**を中央寄せした、グランス用（一瞥用）ボード。
-- 日本語（駅名・所要時間・`つつじヶ丘`）と Latin 等幅（時刻・ステータスのタイムスタンプ）の**混植**。
+- 日本語（駅名・所要時間・`つつじヶ丘`）と Latin 等幅（カードの出発・到着時刻）の**混植**。
 - 出典: `frontend/index.html`、`frontend/src/index.css`、ルート `CLAUDE.md` の "Frontend Design"。
 
 #### Gaps & Proposals
@@ -238,7 +254,7 @@ components:
 | トークン（呼び出し名） | frontmatter | 値 | 役割（実使用） |
 |---|---|---|---|
 | `--bg-primary` | `colors.bg-primary` | `#0a0a0a` | ページ地・ヘッダー地（純黒を避けた最暗段） |
-| `--bg-secondary` | `colors.bg-secondary` | `#111111` | タブ hover 地・refresh ボタン地・StatusIndicator 地 |
+| `--bg-secondary` | `colors.bg-secondary` | `#111111` | タブ hover 地・refresh ボタン地 |
 | `--bg-tertiary` | `colors.bg-tertiary` | `#171717` | RouteDetail コンテナ地・refresh hover 地 |
 | `--bg-elevated` | `colors.bg-elevated` | `#1a1a1a` | 最上段の面。**カード地**（TransitCard・空状態カード `.empty`）。屋外可読性のためカード地をこの段まで引き上げた（issue #96 / ADR 0004 D-4 が上限。`--accent-blue` 到着時刻が 4.73:1 でぎりぎり AA） |
 | `--border-primary` | `colors.border-primary` | `#262626` | 既定のボーダー（タブ・ボタン・区切り線・空状態カード） |
@@ -246,16 +262,19 @@ components:
 | `--border-tertiary` | `colors.border-tertiary` | `#666666` | カードの既定アウトライン・バッジのアウトライン。ページ地に 3.45:1 / カード地に 3.03:1（issue #96 / ADR 0004。2:1 の house 閾値を満たす） |
 | `--border-elevated` | `colors.border-elevated` | `#8a8a8a` | カード hover 時のアウトライン（resting `--border-tertiary` より明るい＝ボーダーランプは単調） |
 | `--text-primary` | `colors.text-primary` | `#fafafa` | 本文・主要テキスト |
-| `--text-secondary` | `colors.text-secondary` | `#a1a1a1` | 補助テキスト（タブ非選択・ステータスラベル・ローディング文言・空状態文言） |
+| `--text-secondary` | `colors.text-secondary` | `#a1a1a1` | 補助テキスト（タブ非選択・ローディング文言・空状態文言） |
 | `--text-tertiary` | `colors.text-tertiary` | `#8a8a8a` | 装飾・最小ウェイト（矢印・フッター・タイムスタンプ・路線名）。**WCAG AA 達成値**（ADR 0003 D-E） |
 | `--bg-inverted` | `colors.bg-inverted` | `#fafafa` | 選択中タブ（反転チップ）の地。屋外グレア下で選択状態が唯一残る近白面（ADR 0004。地に `--text-*` を塗らないための専用ロール） |
 | `--text-inverted` | `colors.text-inverted` | `#0a0a0a` | 選択中タブ（反転チップ）のラベル。近白地に対し 18.97:1（ADR 0004） |
 | `--accent-blue` | `colors.accent-blue` | `#3b82f6` | 到着時刻・ロゴ・タイムライン dot・active ボーダー・focus リング |
 | `--accent-blue-hover` | `colors.accent-blue-hover` | `#2563eb` | refresh ボタンの**押下（`:active`）地／罫**（TD#4 で役割確定） |
-| `--accent-green` | `colors.accent-green` | `#22c55e` | status OK アイコン（Connected） |
-| `--accent-red` | `colors.accent-red` | `#ef4444` | エラーテキスト・status error アイコン |
+| `--accent-green` | `colors.accent-green` | `#22c55e` | status OK ドット（`サーバー接続: 正常`） |
+| `--accent-red` | `colors.accent-red` | `#ef4444` | エラーテキスト・再試行ボタン文字・status error ドット |
 | `--accent-red-tint` | `colors.accent-red-tint` | `#ef44441a` | エラーバナーの地（`--accent-red` の α10%。TD#3 でトークン化） |
-| `--accent-red-tint-border` | `colors.accent-red-tint-border` | `#ef444433` | エラーバナーの罫（`--accent-red` の α20%） |
+| `--accent-red-tint-border` | `colors.accent-red-tint-border` | `#ef444433` | エラーバナーの罫・再試行ボタンの罫（`--accent-red` の α20%） |
+| `--accent-amber` | `colors.accent-amber` | `#f59e0b` | 鮮度ピル（`N分前のデータ`）の文字と `更新` ボタン文字（ADR 0008 D-4） |
+| `--accent-amber-tint` | `colors.accent-amber-tint` | `#f59e0b1a` | 鮮度ピルの地（`--accent-amber` の α10%） |
+| `--accent-amber-tint-border` | `colors.accent-amber-tint-border` | `#f59e0b33` | 鮮度ピルと `更新` ボタンの罫（`--accent-amber` の α20%） |
 
 - `colors.primary` は `{colors.accent-blue}` への参照（`@google/design.md` の色ロール `primary` を満たすためのエイリアス）。
   生成物では `--color-primary` として出力されるが、UI からは `--accent-blue` 名で参照する。
@@ -277,6 +296,9 @@ components:
   `--accent-red-tint-border` に置換した。tint は半透明なので、実効コントラストは**下地（`--bg-primary`）に合成した色**
   `rgb(33, 16, 16)` に対して評価する必要があり、`--accent-red` はそこで **4.87:1**（AA 達成）。
   `lint:design` はこの合成を行えない（α 非対応）ため、この比率は Vitest の contrast テストで固定している。
+- **amber（鮮度ピル）も同じ扱い**（issue #121 / ADR 0008 D-3）。`--accent-amber` はカード地 `--bg-elevated` に対し
+  **8.10:1**、ヘッダー地 `--bg-primary` に `--accent-amber-tint` を合成した面に対し **8.07:1**。どちらも 4.5:1 以上を
+  Vitest が `StatusIndicator.module.css` の `.stale` 宣言から解決して固定する（`#b45309` が 3.47:1 で落ちる歯止めテスト付き）。
 - 残る色の課題は無い。新色を足すときは frontmatter に追加し、必ずどこかの `components` から参照する
   （未参照だと `lint:design` の `orphaned-tokens` warning が出る）。
 - **ただし `orphaned-tokens` warning だけでは不十分。** この warning は `components` に**何か1つ**エントリがあれば黙る。
@@ -309,10 +331,11 @@ components:
   2xl:20px`）。生成物に `--text-xs…--text-2xl`・`--font-weight-*`・`--tracking-*` として出力される。
   **呼び出し側（`*.module.css`）はすべて別名 `--font-size-xs…--font-size-2xl` を参照し、直書き px は 0 件**
   （Tech Debt #2 クローズ。Vitest が `font-size` を階梯別名のみに拘束する）。
-- **アイコン寸法は font-size ではない。** status の `Circle`(10px) / `Warning`(12px) は Phosphor の `size` prop で渡す
-  （他の全アイコンと同じ作法）。10px は型階梯の外だが、これはテキストではないため階梯に足さない。
+- **アイコン寸法は font-size ではない。** status ドットの `Circle`(6px) は Phosphor の `size` prop で渡す
+  （他の全アイコンと同じ作法）。6px は型階梯の外だが、これはテキストではないため階梯に足さない。
 - ウェイトは `500` と `600` の2種のみ。
-- 等幅は時刻列（TransitCard の `.departure`/`.arrival`、`--font-mono`）と StatusIndicator の `.timestamp` に適用。
+- 等幅は時刻列（TransitCard の `.departure`/`.arrival`、`--font-mono`）に適用。StatusIndicator の `.timestamp` は
+  日本語の相対表記（`N秒前に更新`）になったため等幅を外した。
 - 字間 `letter-spacing: -0.02em` は **Latin/数字のみ**に適用（`.title`、`.departure`/`.arrival`）。CJK には掛けていない。
 - **CJK 本文の行間・禁則（実装済み。Typography の Gaps からクローズ）。** 日本語ラベル（駅名・路線名・タブ）は
   `line-height: 1.6`（`body` の `1.5` を局所的に上書き）・`word-break: normal`・`line-break: strict` を持つ。適用先は
@@ -360,7 +383,8 @@ components:
 - **transition**: `--transition-fast: 100ms ease` のみ（**export 表現不可 → 手書き残余**）。
   未使用だった `--transition-normal`（`150ms ease`）は削除した（Tech Debt #4）。
 - **配置**: `max-width: 600px` の単一カラムを `margin: 0 auto` で中央寄せ。カード間の縦 gap は `.cards` の `--space-3`。
-  `.content` は gap を持たない（`.status` と `.cards` が排他のため。Components 参照）。モバイルファースト。
+  `.content` は gap を持たない（空の `.status` に幽霊行を作らないため。エラーバナーとカードが並ぶときの間隔は
+  `.status:not(:empty)` の `margin-bottom: --space-3`。Components 参照）。モバイルファースト。
 - **ブレークポイントは `max-width: 480px` の 1 本のみ**（Tech Debt #5 クローズ）。規約:
   - 値は **480px 固定**。第 2 のブレークポイントを足さない（他は流動レイアウトで解く）。
   - **寸法ブレークポイント（`min-width`/`max-width`）を書いてよい唯一のファイルは `TransitCard.module.css`**
@@ -410,11 +434,11 @@ components:
 
   | トークン | frontmatter | 値 | 用途 |
   |---|---|---|---|
-  | `--radius-sm` | `rounded.sm` | `4px` | バッジ・RouteDetail コンテナ・スクロールバー thumb |
-  | `--radius-md` | `rounded.md` | `6px` | タブ・refresh ボタン・StatusIndicator |
+  | `--radius-sm` | `rounded.sm` | `4px` | バッジ・RouteDetail コンテナ・スクロールバー thumb・鮮度ピルの `更新` ボタン |
+  | `--radius-md` | `rounded.md` | `6px` | タブ・refresh ボタン・鮮度ピル・再試行ボタン |
   | `--radius-lg` | `rounded.lg` | `8px` | カード |
 
-- 円形は RouteDetail の dot（`8px`）と status アイコン（Phosphor `Circle`）のみ。
+- 円形は RouteDetail の dot（`8px`）と status ドット（Phosphor `Circle`、6px）のみ。
 
 ### Gaps & Proposals
 
@@ -464,26 +488,34 @@ components:
   `:disabled` は `opacity: 0.5; cursor: not-allowed`。
   ローディング中は `Spinner`（16）を回し、通常は `ArrowClockwise`（16）。
 - `.spinner`（`spin` 1s linear infinite）は **`@media (prefers-reduced-motion: reduce)` で `animation: none`**。
-- `.content`: 4 分岐（error / loading / empty / cards）の器。うち**状態3分岐（error / loading / empty）だけ**を
-  `.status`（**常設の `aria-live="polite"`**）で包む。分岐ノードは文言ごと条件マウントされるため、差し替えを
-  読み上げさせるには**それらより長生きするコンテナ**側に live region を置く必要がある。
-  **`.cards` は live region の外**に置く: 中に入れるとタブ切替のたびに時刻表全体が読み上げられてしまう
+- `.content`: 5 分岐の器（issue #121。`hasCards` = `activeRoutes.length > 0`）:
+  エラー×データ無し（バナーのみ）/ エラー×既存データ（バナー + 直前のカード）/ loading / empty / 通常（カード）。
+  **エラーでもカードを隠さない**: `useTransit` は失敗時に直前の `originRoutes` を保持するので、カードは
+  `hasCards` だけで描画し、バナーはその上に重ねる（ADR 0007 D-2）。
+  うち**状態3分岐（error / loading / empty）だけ**を `.status`（**常設の `aria-live="polite"`**）で包む。分岐ノードは
+  文言ごと条件マウントされるため、差し替えを読み上げさせるには**それらより長生きするコンテナ**側に live region を
+  置く必要がある。**`.cards` は live region の外**に置く: 中に入れるとタブ切替のたびに時刻表全体が読み上げられてしまう
   （ユーザー起点の遷移に告知は要らない）。空の `.status` は**高さ 0 のまま表示し続ける**（`display: none` は
   live region をアクセシビリティツリーから削除してしまい、「内容と同時に現れるリージョン」＝条件マウントと
-  同じ振る舞いに戻ってしまう）。`.content` に `gap` を置かないのはこのため: `.status` と `.cards` は排他
-  （cards は `activeRoutes.length > 0`、`.status` の3分岐はいずれもその否定）なので、`gap` は幽霊行しか生まない。
+  同じ振る舞いに戻ってしまう）。`.content` に `gap` を置かないのはこのため（空の `.status` に幽霊行を作る）。
+  バナーとカードが並ぶときの間隔は `.status:not(:empty) { margin-bottom: --space-3 }` が受け持つ。
 - `.loading`: 縦中央寄せ、`Spinner`（24）+ `Loading transit information...`、padding `--space-12`、色 `--text-secondary`、`--font-size-base`。
-- `.error`: `Failed to load transit information`、**`role="alert"`**、padding `--space-4`、地 `--accent-red-tint`、罫
-  `1px solid --accent-red-tint-border`、`--radius-md`、色 `--accent-red`、`--font-size-base`（Colors 参照）。
+- `.error`: 見出し `サーバーに接続できません`、既存カードがあるときは 2 行目 `表示中は HH:MM 時点のデータです`
+  （`.errorDetail`、`--font-size-sm`。`HH:MM` は `lastUpdated` を `formatClockTime()` で JST 表記）、右端に
+  `再試行` ボタン（`.retryButton`。`refresh` を呼ぶ前にフォーカスを `<main>`（`tabIndex={-1}`）へ退避する。押下でバナーごとアンマウントされ、
+  フォーカスが `<body>` へ落ちるのを防ぐため。`useTransit` は取得開始時に `error` を消すので `disabled` は持たない。地なし・罫
+  `1px solid --accent-red-tint-border`・`--radius-md`・**可視ボックス自体が 44×44 以上**）。**`role="alert"`**、
+  padding `--space-4`、地 `--accent-red-tint`、罫 `1px solid --accent-red-tint-border`、`--radius-md`、
+  色 `--accent-red`、`--font-size-base`（Colors 参照）。**hook の error 文字列（`HTTP error: 500` 等）は描画しない**。
 - `.empty`: **`Tray`（24, 色 `--text-tertiary` = `.emptyIcon`）** + `No departures found`、**`role="status"`**、
   縦積み `gap --space-3`、padding `--space-12`、地 `--bg-elevated`、罫 `1px solid --border-primary`、`--radius-lg`、
   色 `--text-secondary`、`--font-size-base`、中央寄せ（`components.empty-state`）。**赤もボタンも持たない**
-  （エラーではなく「結果ゼロ」の告知）。描画条件は `!error && !loading && lastUpdated && activeRoutes.length === 0`。
+  （エラーではなく「結果ゼロ」の告知）。描画条件は `!error && !hasCards && !loading && lastUpdated`。
   **`lastUpdated` で門番する**のは、`loading` の初期値が `false` のため、これが無いと初回ペイントで空状態が
   一瞬ちらつくため。
 - `.error` / `.empty` の `role` は**必須**（バナー／カードを支援技術に「アラート」「ステータス」として提示する）。
-  `tests/App.test.tsx` が 4 分岐（error / loading / empty / cards）と role・`aria-live`・`aria-busy`・`aria-pressed` を
-  固定している。
+  `tests/App.test.tsx` が 5 分岐（1 分岐 1 テスト）・生エラー文字列の非表示・`再試行` の配線と
+  role・`aria-live`・`aria-busy`・`aria-pressed` を固定している。
 - `.footer`: `Data from Jorudan`、padding `--space-4`、中央寄せ、`--font-size-xs`、色 `--text-tertiary`、上罫 `1px solid --border-primary`。
 
 #### TransitCard（`TransitCard.tsx` / `TransitCard.module.css`）
@@ -529,16 +561,24 @@ components:
 
 #### StatusIndicator（`StatusIndicator.tsx` / `StatusIndicator.module.css`）
 
-- `.container`: 地 `--bg-secondary`、ボーダー `--border-primary`、`--radius-md`、`--font-size-sm`。
-- 状態は**アイコン形 + ラベル + 色**の三重表現（色単独に依存しない）。**アイコン寸法は `size` prop**（CSS の
-  `font-size` ではない。`.icon*` クラスは色とアニメだけを持つ）:
-  - `ok` → `Circle`（`size={10}`, weight fill, 色 `--accent-green`）+ ラベル `Connected`（`components.status-indicator-ok`）。
-  - `error` → `Warning`（`size={12}`, weight fill, 色 `--accent-red`）+ ラベル `Error`（`components.status-indicator-error`）。
-  - `loading` → `Circle`（`size={10}`, 色 `--text-tertiary`, `pulse` アニメ）+ ラベル `Connecting`
-    （`components.status-indicator-loading`。`--text-tertiary` は AA 達成済みで warning は出ない）。
+- **控えめなドット + 相対鮮度**（issue #121）。`.container` は箱を持たない（地・罫・padding なし。ヘッダー地
+  `--bg-primary` の上にそのまま載る）、`gap --space-2`、`--font-size-sm`。props は `status` / `lastUpdated` /
+  `onRefresh`（App の `refresh`。`再試行` と同じくフォーカスを `<main>` へ退避してから呼ぶ）/ `refreshing`（App の `loading`）。現在時刻は `useNow()`（1 秒刻みの共有クロック）。
+- **ドット**: Phosphor `Circle`（`size={6}`, weight fill, `aria-hidden`）。色は API status で
+  `ok` → `--accent-green`（`components.status-indicator-ok`）/ `error` → `--accent-red`（`status-indicator-error`）/
+  `loading` → `--text-tertiary` + `pulse`（`status-indicator-loading`）。色だけに頼らないよう、隣に
+  `visually-hidden` のラベル `サーバー接続: 正常` / `サーバー接続: エラー` / `サーバー接続: 確認中` を置く。
+- **鮮度テキスト**（`lastUpdated` があるときだけ）: 最後の成功取得から 180 秒未満は `.timestamp`
+  （`--font-size-xs`/`--text-tertiary`）に `N秒前に更新` / `N分前に更新`（`relativeTimeLabel()`）。
+- **鮮度ピル**: 180 秒以上（`isStale()`、`STALE_AFTER_MS = 180_000`、境界は 180 秒ちょうどで stale）で `.timestamp` の
+  代わりに `.stale` ピル `N分前のデータ` + `更新` ボタン（`.staleRefresh`。`onRefresh` を呼び、`refreshing` 中は
+  `disabled`/`aria-busy`）。ピルは padding `--space-1 --space-2`、地 `--accent-amber-tint`、罫
+  `1px solid --accent-amber-tint-border`、`--radius-md`、色 `--accent-amber`（`components.stale-pill` /
+  `stale-pill-surface` / `stale-pill-border`）。ボタンは地なし・罫 `--accent-amber-tint-border`・`--radius-sm`、
+  `position: relative` + 透明な `::after`（44×44・中央）でヒット領域だけ広げる（`.refreshButton` と同じ作法）。
 - `.iconLoading`（`pulse` 1.5s ease-in-out infinite）は **`@media (prefers-reduced-motion: reduce)` で
   `animation: none` + `opacity: 1`**（キーフレーム始点の `0.3` に凍結させず、不透明で止める）。
-- `.timestamp`: `lastUpdated` があるとき `Updated HH:MM:SS`（`--font-mono`/`--font-size-xs`/`--text-tertiary`）。
+- `tests/StatusIndicator.test.tsx` が 179 秒 / 180 秒の境界・`更新` の配線・ドットの隠しラベルを固定している。
 
 #### empty-state（**実装済み**）
 
@@ -565,7 +605,7 @@ components:
 - 時刻・数値列は**等幅**（`--font-mono`）+（提案）`tabular-nums` で桁を揃える。
 - hover の強調は**ボーダーのみ**で表現する。
 - focus は共通の `:focus-visible`（2px `--accent-blue`）を維持する。
-- 状態は色だけでなく**アイコン形 + ラベル**でも表す（StatusIndicator）。
+- 状態は色だけに頼らず**テキスト**でも表す（StatusIndicator のドットは `visually-hidden` ラベル、鮮度は文言とピル）。
 - export 表現不可のトークン（`--font-sans` / `--font-mono` / `--transition-*`）は `index.css` の
   **手書き残余区画にだけ**足す。
 - `@google/design.md` は `npm run lint:design` / `npm run export:design`（ローカル bin）で実行する。
@@ -595,8 +635,8 @@ components:
     `.meta` が `order: 2`、`.expandIcon` が `order: 3`。
   - `.departure`/`.arrival` が `--font-size-xl` → `--font-size-2xl`（`18px` → `20px`）に拡大。
 - 他のコンポーネントは**流動レイアウト**（固定ブレークポイント無し）。タブは `overflow-x: auto` で横スクロール。
-- **タッチターゲットは 44×44 以上**（Tech Debt #6 クローズ）: refresh は視覚 32×32 + `::after` 44×44 のヒット領域、
-  タブは `min-width`/`min-height: 44px`。Playwright が `elementFromPoint` でヒット領域を実測して固定している
+- **タッチターゲットは 44×44 以上**（Tech Debt #6 クローズ）: refresh と鮮度ピルの `更新` は `::after` 44×44 の
+  ヒット領域、タブとエラーバナーの `再試行` は `min-width`/`min-height: 44px`。Playwright が `elementFromPoint` でヒット領域を実測して固定している
   （`boundingBox()` は擬似要素を見ないため、可視ボックスではなく**当たり判定**を測る）。
 - **`prefers-reduced-motion: reduce`** で `spin` / `pulse` を停止（Tech Debt #7a クローズ）。これは寸法の
   ブレークポイントではないため、単一ブレークポイント規約の対象外。
@@ -674,30 +714,33 @@ components:
 Colors / Layout / Shapes の各表が frontmatter のミラー（生成／手書きの境界は Overview の表を参照）。
 Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bold) / `ArrowRight`(16) / `ArrowClockwise`(16) /
 `Spinner`(16・24) / `Tray`(24, 空状態) / `Clock`(12,bold) / `ArrowsDownUp`(12,bold) / `CaretUp`・`CaretDown`(16) /
-`Circle`(status, 10) / `Warning`(status, 12)。アニメ: `spin` 1s linear infinite / `pulse` 1.5s ease-in-out infinite
-（どちらも `prefers-reduced-motion: reduce` で停止）。タッチターゲット: 44×44（refresh は `::after`、タブは
+`Circle`(status ドット, 6)。アニメ: `spin` 1s linear infinite / `pulse` 1.5s ease-in-out infinite
+（どちらも `prefers-reduced-motion: reduce` で停止）。タッチターゲット: 44×44（refresh と `更新` は `::after`、タブと `再試行` は
 `min-width`/`min-height`）。ブレークポイント: `max-width: 480px` の 1 本のみ。
 
-### B. 主要 UI 状態（Key UI States）— 実在する14状態
+### B. 主要 UI 状態（Key UI States）— 実在する16状態
 
-コードから抽出した実 UI 状態。**この14状態以外を発明しない**（スケルトン・カード別エラー等は存在しない）。
+コードから抽出した実 UI 状態。ADR 0007 D-2 が旧「14状態以外を発明しない」規則を開き、#15・#16 を足した。
+**新しい状態は ADR で正当化してから足す**（スケルトン・カード別エラー等は存在しない）。
 
 | # | 状態 | 根拠 |
 |---|---|---|
-| 1 | 初回ローディング（`Spinner` 24 + `Loading transit information...`） | `App.tsx` `!error && activeRoutes.length === 0 && loading` |
-| 2 | エラーバナー（固定 `Failed to load transit information`、`role="alert"`。hook の error 文字列は非表示） | `App.tsx` `error &&` / `.error` |
+| 1 | 初回ローディング（`Spinner` 24 + `Loading transit information...`） | `App.tsx` `!error && !hasCards && loading` |
+| 2 | エラーバナー・データ無し（固定 `サーバーに接続できません` + `再試行`、`role="alert"`。hook の error 文字列は非表示） | `App.tsx` `error && !hasCards` / `.error` |
 | 3 | リフレッシュ中（refresh ボタン内 `Spinner` 16・既存カードは残る） | `App.tsx` `refreshButton disabled={loading}` |
 | 4 | 空状態（`routes=[]`・`loading=false`・`lastUpdated` あり・`error=null` → `.empty` カード `Tray`(24) + `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
 | 5 | 次発カード既定展開＋左キーライン（最早出発をデータから導出。パース失敗・6時間超の時刻差ではマークなし） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `deriveNextIndex()` / `.cardNext` |
 | 6 | カード展開／折りたたみ | `TransitCard.tsx` `expanded` トグル |
 | 7 | タブ active | `App.module.css` `.tabActive` |
 | 8 | タブ inactive | `.tab` 既定 |
-| 9 | status: ok（`Connected`・緑 `Circle`） | `StatusIndicator.tsx` `status === 'ok'` |
-| 10 | status: error（`Error`・赤 `Warning`） | `status === 'error'` |
-| 11 | status: loading（`Connecting`・pulse する `Circle`） | `status === 'loading'` |
+| 9 | status: ok（緑ドット・隠しラベル `サーバー接続: 正常`） | `StatusIndicator.tsx` `status === 'ok'` |
+| 10 | status: error（赤ドット・隠しラベル `サーバー接続: エラー`） | `status === 'error'` |
+| 11 | status: loading（pulse するドット・隠しラベル `サーバー接続: 確認中`） | `status === 'loading'` |
 | 12 | RouteDetail タイムライン（始発終着 = 塗り dot / 乗換 = 中空 dot） | `RouteDetail.tsx` `isTerminal` |
 | 13 | RouteDetail 生 `<pre>` フォールバック | `parseRoute()` が 0 件のとき `.rawRoute` |
 | 14 | 不正サマリ（`--:--` / `--` 表示） | `parseSummary()` の既定値 |
+| 15 | データ鮮度切れ（最後の成功取得から 180 秒以上 → amber ピル `N分前のデータ` + `更新`。未満は `N秒前に更新` / `N分前に更新`） | `StatusIndicator.tsx` `isStale()` / `.stale` / `components.stale-pill` |
+| 16 | エラーバナー・既存データあり（`サーバーに接続できません` + `表示中は HH:MM 時点のデータです` + `再試行`、直前のカードは表示したまま） | `App.tsx` `error && hasCards` / `.error` + `.cards` |
 
 横断挙動（独立した状態ではない）: 長い日本語名の折返し（`line-break: strict` / `word-break: normal`）/
 タブ多数時の横スクロール（`overflow-x: auto`）/ `@media (max-width: 480px)` リフロー / refresh ボタンの押下
@@ -707,18 +750,22 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 
 ### C. マイクロコピー一覧（Microcopy）— 逐語
 
-UI 文言は**英語のまま**。翻訳しない。日本語は `つつじヶ丘` と `ja-JP` 時刻フォーマットのみ。
+ADR 0007 D-1 で UI 文言は**日本語へ移行中**（旧「英語のまま・翻訳しない」方針は撤回）。下表は現時点の逐語で、
+英語の文言（`Transit` / `Refresh` / `Loading transit information...` / `No departures found` / `Data from Jorudan`）はまだ置き換えていない。
 
 | 文言 | 場所 |
 |---|---|
 | `Transit` | ヘッダータイトル |
 | `Refresh` | refresh ボタン `aria-label` |
 | `Loading transit information...` | 初回ローディング |
-| `Failed to load transit information` | エラーバナー |
+| `サーバーに接続できません` | エラーバナー見出し |
+| `表示中は HH:MM 時点のデータです` | エラーバナー 2 行目（既存カードがあるときのみ。`HH:MM` は JST） |
+| `再試行` | エラーバナーのボタン |
 | `No departures found` | 空状態カード（`.empty`） |
-| `Connected` / `Error` / `Connecting` | StatusIndicator ラベル |
-| `Updated HH:MM:SS` | StatusIndicator タイムスタンプ（`ja-JP`・`2-digit` 時分秒） |
+| `サーバー接続: 正常` / `サーバー接続: エラー` / `サーバー接続: 確認中` | StatusIndicator ドットの `visually-hidden` ラベル |
+| `N秒前に更新` / `N分前に更新` | StatusIndicator 鮮度テキスト（180 秒未満） |
+| `N分前のデータ` / `更新` | StatusIndicator 鮮度ピルとそのボタン（180 秒以上） |
 | `Data from Jorudan` | フッター |
-| `つつじヶ丘` | 固定の到着駅（唯一の常時表示日本語ラベル） |
+| `つつじヶ丘` | 固定の到着駅 |
 
 > ブラウザタブの `<title>` のみ日本語を含む: `Transit - 六本木一丁目 → つつじヶ丘`（`index.html`）。

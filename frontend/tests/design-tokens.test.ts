@@ -222,7 +222,7 @@ const appModuleCss = stripComments(readFileSync(join(srcDir, 'App.module.css'), 
 /** The body of a single-class rule `.name { ... }`. Throws when there is no such rule. */
 function ruleBody(css: string, selector: string): string {
   const match = new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`).exec(css)
-  if (!match) throw new Error(`no .${selector} rule in App.module.css`)
+  if (!match) throw new Error(`no .${selector} rule in the stylesheet`)
   return match[1]
 }
 
@@ -677,6 +677,45 @@ describe('next-departure keyline (issue #97, ADR 0004 D-3)', () => {
     const ratio = contrastRatio(veiled(token('--color-accent-blue')), veiled(cardFill))
     expect(ratio).toBeLessThan(4.5)
     expect(ratio).toBeGreaterThan(1)
+  })
+})
+
+describe('stale-data amber pill (issue #121, ADR 0008 D-3)', () => {
+  // Reads the declarations off StatusIndicator.module.css `.stale`, not just the token values: a
+  // token-only contract stays green even if the pill is repointed at a darker colour. ruleBody()
+  // throws when the rule or property is missing, so deleting the pill fails the test.
+  const statusModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'StatusIndicator.module.css'), 'utf-8')
+  )
+  const cardModuleCss = stripComments(
+    readFileSync(join(srcDir, 'components', 'TransitCard.module.css'), 'utf-8')
+  )
+  const amberText = resolveColor(declaredValue(ruleBody(statusModuleCss, 'stale'), 'color', 'stale'))
+  const pillTint = resolveColor(
+    declaredValue(ruleBody(statusModuleCss, 'stale'), 'background-color', 'stale')
+  )
+  const cardFill = resolveColor(declaredValue(ruleBody(cardModuleCss, 'card'), 'background-color', 'card'))
+  // The pill sits in the header, so its translucent tint composites over the header ground.
+  const headerGround = paintedColor('header', 'background-color')
+
+  it('renders the amber text at >= 4.5:1 on the card fill (WCAG 1.4.3)', () => {
+    expect(contrastRatio(parseHex(amberText), parseHex(cardFill))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('renders the amber text at >= 4.5:1 over its tint composited on the header ground', () => {
+    const surface = composite(pillTint, headerGround)
+    expect(contrastRatio(parseHex(amberText), surface)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('keeps the 更新 button text on the pill amber (color: inherit)', () => {
+    // The button sits inside the pill; inheriting is what puts it under the amber contracts above.
+    expect(declaredValue(ruleBody(statusModuleCss, 'staleRefresh'), 'color', 'staleRefresh')).toBe('inherit')
+  })
+
+  it('still fails a darker amber (#b45309 = 3.47:1 on the card fill), proving the check has teeth', () => {
+    // Guards the guard: if this ever reaches 4.5:1 the ratio maths has broken and the amber
+    // contracts above would be vacuously green.
+    expect(contrastRatio(parseHex('#b45309'), parseHex(cardFill))).toBeLessThan(4.5)
   })
 })
 

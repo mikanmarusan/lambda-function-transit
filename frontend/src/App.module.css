@@ -43,6 +43,12 @@
   padding: var(--space-4);
 }
 
+/* <main> is a programmatic focus target only (tabIndex -1, focused when 再試行 / 更新 unmounts
+   the button just pressed), so it draws no focus ring. */
+.main:focus {
+  outline: none;
+}
+
 .container {
   max-width: 600px;
   margin: 0 auto;
@@ -180,15 +186,20 @@
   opacity: 0.5;
 }
 
-/* No `gap` here, deliberately. `.status` and `.cards` are mutually exclusive - the cards need
-   activeRoutes.length > 0 and every .status branch needs the opposite - so a gap could only ever
-   reserve a phantom row above the cards, for the empty (0-height) live region.
+/* No `gap` here, deliberately: a gap would reserve a phantom row above the cards for the empty
+   (0-height) live region whenever no status branch is mounted. The one branch that coexists with
+   the cards - the error banner over the last-known data - gets its spacing from
+   `.status:not(:empty)` instead, which only applies while the region has content.
    The empty `.status` must keep its box: `display: none` would prune the live region from the
    accessibility tree, and a region that only enters the tree with its content already in place is
    no better than a conditionally mounted one (Tech Debt #9). */
 .content {
   display: flex;
   flex-direction: column;
+}
+
+.status:not(:empty) {
+  margin-bottom: var(--space-3);
 }
 
 .cards {
@@ -231,13 +242,40 @@
 .error {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-4);
   background-color: var(--accent-red-tint);
   border: 1px solid var(--accent-red-tint-border);
   border-radius: var(--radius-md);
   color: var(--accent-red);
   font-size: var(--font-size-base);
+}
+
+.errorText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The data-time line is secondary to the headline but stays the error red: on the composited tint
+   only --accent-red is pinned at >= 4.5:1 (tests/design-tokens.test.ts). */
+.errorDetail {
+  font-size: var(--font-size-sm);
+}
+
+/* The visible box is the touch target: min 44x44 (Tech Debt #6), like `.tab`. */
+.retryButton {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  background: none;
+  border: 1px solid var(--accent-red-tint-border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .spinner {

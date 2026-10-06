@@ -140,8 +140,10 @@ test.describe('Transit App', () => {
   test('should display status indicator', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByText('Connected')).toBeVisible()
-    await expect(page.locator('[class*="timestamp"]')).toContainText('Updated')
+    // A quiet dot plus relative freshness (issue #121); the dot's state is a hidden text label.
+    await expect(page.getByText('サーバー接続: 正常')).toHaveCount(1)
+    await expect(page.locator('[class*="timestamp"]')).toContainText(/\d+秒前に更新/)
+    await expect(page.getByText('Connected')).toHaveCount(0)
   })
 
   test('should have refresh button', async ({ page }) => {
@@ -201,6 +203,54 @@ test.describe('Transit App', () => {
 
     const body = page.locator('body')
     await expect(body).toHaveCSS('background-color', 'rgb(10, 10, 10)')
+  })
+})
+
+test.describe('Error over last-known data (issue #121)', () => {
+  test('keeps the cards visible under the banner when a refresh fails', async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/')
+    await expect(page.getByText('18:49')).toBeVisible()
+
+    await page.unrouteAll({ behavior: 'ignoreErrors' })
+    await mockApi(page, { transitStatus: 500, transit: { message: 'boom' } })
+    await page.getByRole('button', { name: 'Refresh' }).click()
+
+    const alert = page.getByRole('alert')
+    await expect(alert).toContainText('サーバーに接続できません')
+    await expect(alert).toContainText(/表示中は \d{2}:\d{2} 時点のデータです/)
+    const retry = alert.getByRole('button', { name: '再試行' })
+    await expect(retry).toBeVisible()
+    const retryBox = await interactiveBox(retry)
+    expect(retryBox.width).toBeGreaterThanOrEqual(44)
+    expect(retryBox.height).toBeGreaterThanOrEqual(44)
+    // The raw hook error ("HTTP error: 500") never reaches the screen.
+    await expect(page.getByText(/HTTP error/)).toHaveCount(0)
+    await expect(page.getByText('18:49')).toBeVisible()
+  })
+})
+
+test.describe('Stale-data pill (issue #121)', () => {
+  test('raises the amber pill at 180 s and its 更新 button refetches', async ({ page }) => {
+    // A fake clock drives the shared useNow() interval, so 3 minutes pass instantly.
+    await page.clock.install({ time: new Date('2026-07-13T09:00:00Z') })
+    await mockApi(page)
+    await page.goto('/')
+    await expect(page.locator('[class*="timestamp"]')).toContainText(/秒前に更新/)
+
+    await page.clock.fastForward('03:01')
+    await expect(page.getByText(/^3分前のデータ$/)).toBeVisible()
+
+    const update = page.getByRole('button', { name: '更新' })
+    const box = await interactiveBox(update)
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+
+    const refetch = page.waitForRequest('**/api/transit')
+    await update.click()
+    await refetch
+    await expect(page.locator('[class*="timestamp"]')).toContainText(/秒前に更新/)
+    await expect(update).toHaveCount(0)
   })
 })
 

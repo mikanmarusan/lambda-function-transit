@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowRight, ArrowClockwise, Train, Spinner, Tray } from '@phosphor-icons/react'
 import { useTransit, useApiStatus } from './hooks/useTransit'
 import { TransitCard } from './components/TransitCard'
 import { StatusIndicator } from './components/StatusIndicator'
 import { parseSummary } from './types/transit'
+import { formatClockTime } from './lib/time'
 import styles from './App.module.css'
 
 /** Minutes since midnight for a strict `HH:MM` string; the caller filters `--:--` first. */
@@ -40,6 +41,18 @@ function App() {
   const activeRoutes = originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []
   const departureTimes = activeRoutes.map(route => parseSummary(route.summary).departureTime)
   const nextIndex = deriveNextIndex(departureTimes)
+  // A fetch error does not hide the cards: useTransit keeps the last-known originRoutes on
+  // failure, so they stay on screen under the error banner (ADR 0007 D-2).
+  const hasCards = activeRoutes.length > 0
+
+  // 再試行 and 更新 both unmount on the next state change (useTransit clears `error` as a fetch
+  // starts, and a successful fetch drops the stale pill), which would drop keyboard focus to
+  // <body>. Park focus on <main> first so a keyboard or screen-reader user keeps their place.
+  const mainRef = useRef<HTMLElement>(null)
+  const refreshKeepingFocus = () => {
+    mainRef.current?.focus({ preventScroll: true })
+    refresh()
+  }
 
   return (
     <div className={styles.app}>
@@ -49,11 +62,16 @@ function App() {
             <Train size={20} weight="bold" className={styles.logo} />
             <h1 className={styles.title}>Transit</h1>
           </div>
-          <StatusIndicator status={apiStatus} lastUpdated={lastUpdated} />
+          <StatusIndicator
+            status={apiStatus}
+            lastUpdated={lastUpdated}
+            onRefresh={refreshKeepingFocus}
+            refreshing={loading}
+          />
         </div>
       </header>
 
-      <main className={styles.main}>
+      <main className={styles.main} ref={mainRef} tabIndex={-1}>
         <div className={styles.container}>
           <div className={styles.routeHeader}>
             <div className={styles.tabs}>
@@ -92,18 +110,40 @@ function App() {
           )}
 
           <div className={styles.content}>
-            {/* The status branches (error / loading / empty) are condition-mounted, so the live
-                region has to be a container that outlives them - a role on the branch node itself
-                is only announced by some AT. The cards deliberately live OUTSIDE this region:
-                inside it, every tab switch would re-read the whole timetable. */}
+            {/* Five mutually exclusive render branches, keyed off (error, hasCards, loading,
+                lastUpdated) - see docs/architecture.md "Frontend Render Branches":
+                  error, no cards          -> banner only
+                  error, cards             -> banner + the last-known cards (the hook keeps them)
+                  no error, no cards, busy -> loading
+                  no error, no cards, idle -> empty (once a fetch has landed)
+                  no error, cards          -> cards
+                The status branches are condition-mounted, so the live region has to be a container
+                that outlives them - a role on the branch node itself is only announced by some AT.
+                The cards deliberately live OUTSIDE this region: inside it, every tab switch would
+                re-read the whole timetable. */}
             <div className={styles.status} aria-live="polite">
               {error && (
                 <div className={styles.error} role="alert">
-                  <span>Failed to load transit information</span>
+                  {/* Fixed copy only: the hook's error string (e.g. "HTTP error: 500") never renders. */}
+                  <div className={styles.errorText}>
+                    <span>サーバーに接続できません</span>
+                    {hasCards && lastUpdated && (
+                      <span className={styles.errorDetail}>
+                        表示中は {formatClockTime(lastUpdated.getTime())} 時点のデータです
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.retryButton}
+                    onClick={refreshKeepingFocus}
+                  >
+                    再試行
+                  </button>
                 </div>
               )}
 
-              {!error && activeRoutes.length === 0 && loading && (
+              {!error && !hasCards && loading && (
                 <div className={styles.loading}>
                   <Spinner size={24} className={styles.spinner} />
                   <span>Loading transit information...</span>
@@ -112,7 +152,7 @@ function App() {
 
               {/* Empty state. Gated on lastUpdated: it is set only by a completed fetch, so
                   the card cannot flash on the first paint (loading starts false). */}
-              {!error && !loading && lastUpdated && activeRoutes.length === 0 && (
+              {!error && !hasCards && !loading && lastUpdated && (
                 <div className={styles.empty} role="status">
                   <Tray size={24} className={styles.emptyIcon} />
                   <span>No departures found</span>
@@ -120,7 +160,7 @@ function App() {
               )}
             </div>
 
-            {!error && activeRoutes.length > 0 && (
+            {hasCards && (
               <div className={styles.cards}>
                 {/* Key by the train's identity, not its position: React reuses instances by
                     key and useState initializers only run on mount, so a positional key would

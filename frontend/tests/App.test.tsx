@@ -4,14 +4,14 @@ import type { OriginRoute } from '../src/types/transit'
 import cardStyles from '../src/components/TransitCard.module.css'
 
 /**
- * Guards the four mutually exclusive content branches of App: error / loading / empty / cards.
+ * Guards the five mutually exclusive content branches of App (issue #121):
+ * error without cards / error over the last-known cards / loading / empty / cards.
  *
- * The empty state (Tech Debt #4: it gives --bg-elevated a role) is the branch worth pinning.
- * It is gated on `lastUpdated`, not merely on `!loading`, because useTransit starts with
- * loading = false: without that guard the first paint - which happens before the fetch effect
- * runs - would satisfy `!loading && routes.length === 0` and flash "No departures found" at
- * every visitor. The hook is mocked so each branch, including that pre-fetch instant, can be
- * driven exactly rather than raced.
+ * The empty state (Tech Debt #4: it gives --bg-elevated a role) is gated on `lastUpdated`, not
+ * merely on `!loading`, because useTransit starts with loading = false: without that guard the
+ * first paint - which happens before the fetch effect runs - would satisfy
+ * `!loading && routes.length === 0` and flash the empty card at every visitor. The hook is mocked
+ * so each branch, including that pre-fetch instant, can be driven exactly rather than raced.
  */
 
 // vi.hoisted: vi.mock is lifted above the imports, so the spies it closes over must be created
@@ -54,7 +54,10 @@ const routes: OriginRoute[] = [
 
 const EMPTY = 'No departures found'
 const LOADING = 'Loading transit information...'
-const ERROR = 'Failed to load transit information'
+const ERROR = 'サーバーに接続できません'
+// lastUpdated 2026-07-13T09:00:00Z is 18:00 JST.
+const DATA_TIME = '表示中は 18:00 時点のデータです'
+const RAW_ERROR = 'HTTP error: 500'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -62,13 +65,56 @@ beforeEach(() => {
 })
 
 describe('App content branches', () => {
-  it('shows the empty state once a fetch has settled with no routes', () => {
+  it('error without prior data: banner + 再試行 only, no cards, no empty state', () => {
+    mockTransit({ error: RAW_ERROR, lastUpdated: null })
+    const { container } = render(<App />)
+
+    expect(screen.getByRole('alert').textContent).toContain(ERROR)
+    expect(screen.queryByText(DATA_TIME)).toBeNull()
+    expect(screen.getByRole('button', { name: '再試行' })).toBeDefined()
+    expect(container.querySelector(`.${cardStyles.card}`)).toBeNull()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(screen.queryByText(LOADING)).toBeNull()
+  })
+
+  it('error with prior data: keeps the last-known cards visible under the banner', () => {
+    mockTransit({ originRoutes: routes, error: RAW_ERROR })
+    render(<App />)
+
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain(ERROR)
+    expect(alert.textContent).toContain(DATA_TIME)
+    expect(screen.getByText('18:49')).toBeDefined()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(screen.queryByText(LOADING)).toBeNull()
+  })
+
+  it('loading: spinner only, no empty state', () => {
+    mockTransit({ loading: true, lastUpdated: null })
+    render(<App />)
+
+    expect(screen.getByText(LOADING)).toBeDefined()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('empty: shows the empty state once a fetch has settled with no routes', () => {
     mockTransit()
     render(<App />)
 
     expect(screen.getByText(EMPTY)).toBeDefined()
     expect(screen.queryByText(LOADING)).toBeNull()
-    expect(screen.queryByText(ERROR)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('normal: shows cards and no status branch when routes are present', () => {
+    mockTransit({ originRoutes: routes })
+    render(<App />)
+
+    expect(screen.getByText('18:49')).toBeDefined()
+    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(screen.queryByText(LOADING)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('does not flash the empty state before the first fetch completes', () => {
@@ -80,28 +126,22 @@ describe('App content branches', () => {
     expect(screen.queryByText(EMPTY)).toBeNull()
   })
 
-  it('does not show the empty state while loading', () => {
-    mockTransit({ loading: true, lastUpdated: null })
-    render(<App />)
+  it('never renders the raw error message from the hook', () => {
+    mockTransit({ originRoutes: routes, error: RAW_ERROR })
+    const { container } = render(<App />)
 
-    expect(screen.getByText(LOADING)).toBeDefined()
-    expect(screen.queryByText(EMPTY)).toBeNull()
+    expect(container.textContent).not.toContain(RAW_ERROR)
   })
 
-  it('does not show the empty state on error, even after a prior successful fetch', () => {
-    mockTransit({ error: 'HTTP error: 500' })
-    render(<App />)
+  it('wires 再試行 to refresh and parks focus on <main> before the banner unmounts', () => {
+    mockTransit({ error: RAW_ERROR })
+    const { container } = render(<App />)
 
-    expect(screen.getByText(ERROR)).toBeDefined()
-    expect(screen.queryByText(EMPTY)).toBeNull()
-  })
-
-  it('shows cards and no empty state when routes are present', () => {
-    mockTransit({ originRoutes: routes })
-    render(<App />)
-
-    expect(screen.getByText('18:49')).toBeDefined()
-    expect(screen.queryByText(EMPTY)).toBeNull()
+    const retry = screen.getByRole('button', { name: '再試行' })
+    retry.focus()
+    fireEvent.click(retry)
+    expect(useTransit.mock.results[0].value.refresh).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(container.querySelector('main'))
   })
 
   it('announces the empty and error states to assistive tech', () => {
@@ -110,15 +150,39 @@ describe('App content branches', () => {
     expect(screen.getByRole('status').textContent).toContain(EMPTY)
     unmount()
 
-    mockTransit({ error: 'HTTP error: 500' })
+    mockTransit({ error: RAW_ERROR })
     render(<App />)
     expect(screen.getByRole('alert').textContent).toContain(ERROR)
   })
 })
 
+/**
+ * App -> StatusIndicator wiring (issue #121). lastUpdated in mockTransit() is fixed in the past, so
+ * against the real shared clock the data is always >= 180 s old and the stale pill is up.
+ */
+describe('App stale-data pill wiring', () => {
+  it('wires the 更新 button to refresh and parks focus on <main>', () => {
+    mockTransit({ originRoutes: routes })
+    const { container } = render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: '更新' }))
+    expect(useTransit.mock.results[0].value.refresh).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(container.querySelector('main'))
+  })
+
+  it('passes loading through as refreshing (更新 disabled and busy while a fetch is in flight)', () => {
+    mockTransit({ originRoutes: routes, loading: true })
+    render(<App />)
+
+    const button = screen.getByRole('button', { name: '更新' })
+    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+  })
+})
+
 describe('App accessibility affordances', () => {
   it('keeps the branch container a polite live region so a swapped branch is announced', () => {
-    // The four branches are condition-mounted siblings; only a container that outlives them can
+    // The status branches are condition-mounted siblings; only a container that outlives them can
     // announce the swap, so the live region lives on .content, not on the branch nodes.
     mockTransit()
     const { container } = render(<App />)
@@ -256,7 +320,7 @@ describe('next-departure marker', () => {
     expect(markerLabels()).toHaveLength(0)
     empty.unmount()
 
-    mockTransit({ error: 'HTTP error: 500' })
+    mockTransit({ error: RAW_ERROR })
     const errored = render(<App />)
     expect(markedCards(errored.container)).toHaveLength(0)
     expect(markerLabels()).toHaveLength(0)

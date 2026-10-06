@@ -1,34 +1,62 @@
+/* Quiet by design (issue #121): no box of its own, just a dot and the freshness text on the
+   header ground (--bg-primary). Only the stale pill below raises its voice. */
 .container {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-}
-
-.status {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
-}
-
-.label {
-  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .timestamp {
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
   font-size: var(--font-size-xs);
 }
 
-/* Icon glyph sizes (10/12px) are off the type scale because they are not text: they are
-   Phosphor icon dimensions, passed as the `size` prop in StatusIndicator.tsx like every
-   other icon in the app. These classes carry colour and motion only. */
+/* Stale data (>= 180 s since the last successful fetch, ADR 0007 D-2). The amber text sits on
+   the translucent tint composited over the header ground; that composited contrast is pinned in
+   tests/design-tokens.test.ts, because design.md lint is not alpha-aware. */
+.stale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--accent-amber-tint);
+  border: 1px solid var(--accent-amber-tint-border);
+  border-radius: var(--radius-md);
+  color: var(--accent-amber);
+}
+
+/* 44x44 hit area without growing the header: a transparent, centred ::after, the same idiom as
+   .refreshButton in App.module.css (Tech Debt #6). */
+.staleRefresh {
+  position: relative;
+  padding: 0 var(--space-2);
+  background: none;
+  border: 1px solid var(--accent-amber-tint-border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.staleRefresh::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.staleRefresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Icon glyph size (6px) is off the type scale because it is not text: it is a Phosphor icon
+   dimension, passed as the `size` prop in StatusIndicator.tsx like every other icon in the app.
+   These classes carry colour and motion only. */
 .iconOk {
   color: var(--accent-green);
 }
@@ -52,7 +80,7 @@
 }
 
 /* Tech Debt #7a: with the animation off, the dot is pinned fully opaque rather than left at the
-   keyframe's 0.3 - the `Connecting` label carries the state, the dot must stay legible. */
+   keyframe's 0.3 - the hidden status label carries the state, the dot must stay legible. */
 @media (prefers-reduced-motion: reduce) {
   .iconLoading {
     animation: none;
