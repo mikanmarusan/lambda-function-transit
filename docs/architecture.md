@@ -1,5 +1,5 @@
 # lambda-function-transit - Architecture Spec
-<!-- spec-synced-through: ffc217059bebcba5605c4883af7477b03fbd10a0 -->
+<!-- spec-synced-through: aa04709be858a9d6fa2e5eb834bf0f07cb494967 -->
 
 ## 1. Overview
 
@@ -46,6 +46,8 @@ The full AWS architecture diagram lives at [`diagrams/lambda-function-transit-aw
 | Token pipeline test | Vitest suite guarding token integrity and generated-file drift (see §7) | `frontend/tests/design-tokens.test.ts` |
 | App render-branch test | Vitest + Testing Library suite pinning the four content branches, the next-departure marker (earliest-not-first selection, its guards, the accessible text equivalent, identity-keyed expansion), their ARIA roles, and the accessibility affordances (`aria-live` wrapper, `aria-busy`, `aria-pressed`) (see §5); mocks `useTransit`/`useApiStatus` so each branch — including the pre-fetch instant — is driven rather than raced. `frontend/tsconfig.json` includes `tests/*.tsx` so it is typechecked | `frontend/tests/App.test.tsx` |
 | Frontend E2E suite | Playwright suite that stubs the API with `page.route` and pins the rendered accessibility / touch-target / motion / typography contract in a real browser (see §7) | `frontend/tests/e2e/transit.spec.ts`, `frontend/playwright.config.ts` |
+
+The SAM function is a Zip package of `./src` (`CodeUri`), so every backend module ships with it. The `production` stage of the root `Dockerfile` (the `api-prod` container) instead copies `src/index.mjs`, `src/parse.mjs`, and `src/lines.mjs` by name, so a new backend module must be added to that `COPY` line.
 
 ## 4. Data Model
 
@@ -550,7 +552,7 @@ CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but *
 
 ### Observability
 
-The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable.
+The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable. Every origin whose `origins[].status` is not `ok` emits one `level: "warn"` `Partial origin fetch failure` line carrying `origin`, `status`, and `errorMessage` (the rejection message, or a fixed reason for an unparseable or route-less page).
 
 ## 8. Glossary
 
