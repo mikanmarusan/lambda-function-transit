@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import {
   isValidStructuredTransit,
-  candidateToRoute,
-  parseRoute,
-  parseSummary,
   STRUCTURED_LIMITS,
   LINE_CODES,
-  type Candidate,
 } from '../src/types/transit'
 import { useTransit } from '../src/hooks/useTransit'
 
@@ -54,7 +50,6 @@ const origin = (name = '六本木一丁目') => ({
 
 // Returns a fresh, valid payload; tests mutate their own copy.
 const payload = () => ({
-  routes: [],
   generatedAt: '2026-10-06T20:40:12+09:00',
   destination: 'つつじヶ丘（東京）',
   fastestOrigin: '六本木一丁目' as string | null,
@@ -159,68 +154,45 @@ describe('useTransit structured fields', () => {
   const stubFetch = (body: unknown) =>
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
 
-  it('returns origins, generatedAt and fastestOrigin alongside the legacy routes', async () => {
-    const body = {
-      ...payload(),
-      routes: [{ origin: '六本木一丁目', destination: 'つつじヶ丘（東京）', transfers: [['s', 'r']] }],
-    }
+  it('returns origins, generatedAt and fastestOrigin from a valid payload', async () => {
+    const body = payload()
     stubFetch(body)
     const { result } = renderHook(() => useTransit())
     await waitFor(() => expect(result.current.lastUpdated).not.toBeNull())
     expect(result.current.origins).toEqual(body.origins)
     expect(result.current.generatedAt).toBe(body.generatedAt)
     expect(result.current.fastestOrigin).toBe('六本木一丁目')
-    expect(result.current.originRoutes).toEqual([
-      { origin: '六本木一丁目', destination: 'つつじヶ丘（東京）', transfers: [{ summary: 's', route: 'r' }] },
-    ])
     expect(result.current.error).toBeNull()
   })
 
-  it('drops an invalid structured part but keeps the legacy routes', async () => {
+  it('fails closed on an invalid payload: an error, and no data', async () => {
     const p = payload()
     p.origins[0].candidates[0].legs[0].lineCode = 'X'
-    stubFetch({ ...p, routes: [{ origin: 'A', destination: 'B', transfers: [] }] })
+    stubFetch(p)
     const { result } = renderHook(() => useTransit())
-    await waitFor(() => expect(result.current.lastUpdated).not.toBeNull())
+    await waitFor(() => expect(result.current.error).not.toBeNull())
+    expect(result.current.error).toBe('Invalid API response format')
     expect(result.current.origins).toEqual([])
     expect(result.current.generatedAt).toBeNull()
     expect(result.current.fastestOrigin).toBeNull()
-    expect(result.current.originRoutes).toHaveLength(1)
-    expect(result.current.error).toBeNull()
-  })
-})
-
-describe('candidateToRoute', () => {
-  it('writes a candidate in the legacy summary/route shape that parseSummary and parseRoute read back', () => {
-    const c = {
-      ...candidate(),
-      durationMinutes: 52,
-      transferCount: 1,
-      stops: [stop('六本木一丁目'), stop('市ケ谷'), stop('つつじヶ丘')],
-      legs: [leg('N'), { ...leg('S'), lineName: '都営新宿線' }],
-    }
-    const { summary, route } = candidateToRoute(c as Candidate)
-
-    expect(summary).toBe('20:45発 → 20:51着(52分)(1回)')
-    expect(parseSummary(summary)).toEqual({
-      departureTime: '20:45',
-      arrivalTime: '20:51',
-      duration: '52分',
-      transfers: '1回',
-    })
-    expect(parseRoute(route)).toEqual([
-      { station: '六本木一丁目', line: '東京メトロ南北線', isTerminal: true },
-      { station: '市ケ谷', line: '都営新宿線', isTerminal: false },
-      { station: 'つつじヶ丘', line: null, isTerminal: true },
-    ])
+    expect(result.current.lastUpdated).toBeNull()
   })
 
-  it.each([
-    [59, '59分'],
-    [60, '1時間'],
-    [75, '1時間15分'],
-  ])('spells %i minutes the way Jorudan does (%s)', (durationMinutes, expected) => {
-    const { summary } = candidateToRoute({ ...candidate(), durationMinutes } as Candidate)
-    expect(parseSummary(summary).duration).toBe(expected)
+  it('keeps the last valid data when a later refresh returns an invalid payload', async () => {
+    const first = payload()
+    stubFetch(first)
+    const { result } = renderHook(() => useTransit())
+    await waitFor(() => expect(result.current.lastUpdated).not.toBeNull())
+    const fetchedAt = result.current.lastUpdated
+
+    const invalid = payload()
+    invalid.origins[0].candidates[0].legs[0].lineCode = 'X'
+    stubFetch(invalid)
+    await act(() => result.current.refresh())
+
+    expect(result.current.error).toBe('Invalid API response format')
+    expect(result.current.origins).toEqual(first.origins)
+    expect(result.current.fastestOrigin).toBe(first.fastestOrigin)
+    expect(result.current.lastUpdated).toBe(fetchedAt)
   })
 })

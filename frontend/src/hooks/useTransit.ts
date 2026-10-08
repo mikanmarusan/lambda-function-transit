@@ -1,35 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import {
-  MultiTransitState,
-  TransitResponse,
-  isValidStructuredTransit,
-  parseTransitResponse,
-} from '../types/transit'
+import { MultiTransitState, isValidStructuredTransit } from '../types/transit'
 
 const API_BASE = '/api'
 
-export function isValidTransitResponse(data: unknown): data is TransitResponse {
-  if (typeof data !== 'object' || data === null || !('routes' in data)) return false
-  const routes = (data as TransitResponse).routes
-  if (!Array.isArray(routes)) return false
-  return routes.every((r) => {
-    if (r === null || typeof r !== 'object') return false
-    const route = r as { origin: unknown; destination: unknown; transfers: unknown }
-    if (typeof route.origin !== 'string' || typeof route.destination !== 'string') return false
-    if (!Array.isArray(route.transfers)) return false
-    return route.transfers.every(
-      (t) =>
-        Array.isArray(t) &&
-        t.length === 2 &&
-        typeof t[0] === 'string' &&
-        typeof t[1] === 'string'
-    )
-  })
-}
-
 export function useTransit() {
   const [state, setState] = useState<MultiTransitState>({
-    originRoutes: [],
     origins: [],
     generatedAt: null,
     fastestOrigin: null,
@@ -58,22 +33,15 @@ export function useTransit() {
 
       const data: unknown = await response.json()
 
-      if (!isValidTransitResponse(data)) {
+      // Fails closed: a payload outside the structured contract is an error, never partial data.
+      if (!isValidStructuredTransit(data)) {
         throw new Error('Invalid API response format')
       }
 
-      const originRoutes = parseTransitResponse(data)
-      // During the additive migration (ADR 0006 D-3) the UI falls back to the
-      // legacy routes when `origins` is empty, so a structured part that fails
-      // validation is dropped (empty origins, null fields) rather than failing
-      // the whole response.
-      const structured = isValidStructuredTransit(data) ? data : null
-
       setState({
-        originRoutes,
-        origins: structured?.origins ?? [],
-        generatedAt: structured?.generatedAt ?? null,
-        fastestOrigin: structured?.fastestOrigin ?? null,
+        origins: data.origins,
+        generatedAt: data.generatedAt,
+        fastestOrigin: data.fastestOrigin,
         loading: false,
         error: null,
         lastUpdated: new Date(),

@@ -31,7 +31,6 @@ const OVERALL_BUDGET_MS = 7000;    // total budget for one origin's full handsha
 const ALLOWED_HOSTS = new Set(['www.jorudan.co.jp', 'jid.jorudan.co.jp']);
 const MIN_EXPECTED_BLOCKS = 3;
 const TARGET_BLOCK_INDEX = 2;  // Third block contains route information
-const LEGACY_MAX_CANDIDATES = 2;  // Candidates per origin in the legacy `routes` field (unchanged)
 const MAX_CANDIDATES = 3;  // Candidates per origin in the structured `origins` field
 
 /**
@@ -58,64 +57,6 @@ export function buildDepartureParams(now, walkMinutes) {
  */
 export function buildSearchUrl(origin, walkMinutes, now) {
   return `${JORUDAN_URL_PREFIX}${encodeURIComponent(origin)}${JORUDAN_URL_SUFFIX}&${buildDepartureParams(now, walkMinutes)}`;
-}
-
-/**
- * Escape special regex characters in a string
- * @param {string} string - String to escape
- * @returns {string} Escaped string safe for regex
- */
-function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Extract a field value from summary text
- * @param {string} summary - Summary text block
- * @param {string} label - Label to search for (e.g., '発着時間')
- * @returns {string} Extracted value or empty string
- */
-function extractField(summary, label) {
-  const escapedLabel = escapeRegExp(label);
-  const match = summary.match(new RegExp(`${escapedLabel}：([^\r\n]*)`));
-  return match ? match[1] : '';
-}
-
-/**
- * Extract summary information from HTML block
- * @param {string} block - HTML block containing transit info
- * @returns {string} Summary string with departure/arrival time, duration, and transfers
- */
-export function getSummary(block) {
-  const summary = block.trim().split(/\r?\n\r?\n/)[0] || '';
-
-  const time = extractField(summary, '発着時間');
-  const duration = extractField(summary, '所要時間');
-  const transfers = extractField(summary, '乗換回数');
-
-  return `${time}(${duration})(${transfers})`;
-}
-
-/**
- * Extract and clean route information from HTML block
- * @param {string} block - HTML block containing transit info
- * @returns {string} Cleaned route information
- */
-export function getRoute(block) {
-  const route = block.trim().split(/\r?\n\r?\n/)[1] || '';
-
-  return route
-    .replace(/｜ 　/g, '｜')
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => {
-      if (line.startsWith('■') || line.startsWith('◇')) return true;
-      if (!line.startsWith('｜')) return false;
-      const content = line.slice(1).trim();
-      // Keep only line names (filter out times, fares, and arrows)
-      return content !== '' && !/^[\d↓↑]/.test(content);
-    })
-    .join('\n');
 }
 
 /**
@@ -468,19 +409,6 @@ export async function handler(event, _context) {
       )
     );
 
-    // Legacy `routes` field: same shape and candidate rules as before `origins` existed.
-    const routes = [];
-    results.forEach((r, i) => {
-      if (r.status !== 'fulfilled') return;
-      const transfers = r.value
-        .slice(0, LEGACY_MAX_CANDIDATES)
-        .map(route => [getSummary(route), getRoute(route)])
-        .filter(([summary, route]) => summary !== '()()' && route.trim());
-      if (transfers.length > 0) {
-        routes.push({ origin: JORUDAN_ORIGINS[i].origin, destination: JORUDAN_DESTINATION, transfers });
-      }
-    });
-
     const origins = JORUDAN_ORIGINS.map((config, i) => buildOriginResult(config, results[i], now));
 
     origins.forEach((o, i) => {
@@ -497,14 +425,11 @@ export async function handler(event, _context) {
       }
     });
 
-    // The legacy field keeps its own failure semantics: a stricter structured
-    // parse alone never turns a response the legacy path could serve into a 500.
-    if (routes.length === 0 && origins.every(o => o.status === 'error')) {
+    if (origins.every(o => o.status === 'error')) {
       throw new Error('All origin fetches failed');
     }
 
     return createJsonResponse(200, {
-      routes,
       generatedAt: toJstIso(Math.floor(now.getTime() / 1000) * 1000),
       destination: JORUDAN_DESTINATION,
       fastestOrigin: pickFastestOrigin(origins),

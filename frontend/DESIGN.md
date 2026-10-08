@@ -119,6 +119,9 @@ components:
     backgroundColor: "{colors.bg-tertiary}"
     rounded: "{rounded.md}"
     size: 32px
+  refresh-button-border-hover:
+    backgroundColor: "{colors.border-secondary}"
+    height: 1px
   badge:
     backgroundColor: "{colors.bg-tertiary}"
     textColor: "{colors.text-secondary}"
@@ -227,9 +230,6 @@ components:
   route-timeline-dot:
     backgroundColor: "{colors.accent-blue}"
     size: 8px
-  route-timeline-line:
-    backgroundColor: "{colors.border-secondary}"
-    width: 2px
   focus-ring:
     backgroundColor: "{colors.accent-blue}"
     size: 2px
@@ -273,7 +273,7 @@ components:
 | **生成（frontmatter が正）** | 色（`--color-*`。**α付き tint 色を含む**）・font-size 階梯（`--text-xs…3xl`）・weight（`--font-weight-*`）・tracking（`--tracking-*`）・角丸（`--radius-*`）・spacing（`--spacing-*`） | `src/design-tokens.css`（DO NOT EDIT） |
 | **別名（生成物への薄いエイリアス）** | `--bg-*` / `--border-*` / `--text-primary`・`--text-secondary`・`--text-tertiary` / `--accent-*`（`--accent-red-tint` 系・`--accent-amber-tint` 系を含む） / `--line-*`（路線色） / `--space-1…12` / `--font-size-xs…3xl` | `src/index.css` の別名レイヤ |
 | **手書き残余（export 表現不可）** | `--font-sans`（CJK 込みの連鎖）・`--font-mono`・`--transition-fast` | `src/index.css` の手書き残余区画（`:root`） |
-| **非トークンの設計値** | `line-height`（`body` と `.rawRoute`）・`font-feature-settings`（**提案のみ・未実装**） | 各 CSS の宣言に直書き（`:root` トークンではない） |
+| **非トークンの設計値** | `line-height`（`body` と CJK ラベル）・`font-feature-settings`（**提案のみ・未実装**） | 各 CSS の宣言に直書き（`:root` トークンではない） |
 
 - `--radius-sm/md/lg` は生成名と現行名が 1:1 で一致するため別名を張らず、`@import` した生成物をそのまま使う。
 - font-size 階梯は生成名が `--text-xs…--text-3xl` で、**色の `--text-primary/secondary/tertiary` と名前空間が衝突する**
@@ -322,12 +322,12 @@ components:
 | `--bg-tertiary` | `colors.bg-tertiary` | `#171717` | RouteDetail コンテナ地・refresh hover 地 |
 | `--bg-elevated` | `colors.bg-elevated` | `#1a1a1a` | 最上段の面。**カード地**（TransitCard・空状態カード `.empty`）。RouteDetail の乗車位置コールアウト `.car` と `降車不要` チップの地。屋外可読性のためカード地をこの段まで引き上げた（issue #96 / ADR 0004 D-4 が上限。`--accent-blue` 到着時刻が 4.73:1 でぎりぎり AA） |
 | `--border-primary` | `colors.border-primary` | `#262626` | 既定のボーダー（タブ・ボタン・区切り線・空状態カード・`間に合いません` バッジの罫） |
-| `--border-secondary` | `colors.border-secondary` | `#333333` | refresh ボタン hover / active の一段明るいボーダー・タイムライン縦線・lineName 左罫・スクロールバー thumb |
+| `--border-secondary` | `colors.border-secondary` | `#333333` | refresh ボタン hover / active の一段明るいボーダー（`components.refresh-button-border-hover`）・スクロールバー thumb |
 | `--border-tertiary` | `colors.border-tertiary` | `#666666` | カードの既定アウトライン・バッジ（`最速` / `乗換少`・`あとN分で出る`、RouteDetail の `乗換` / `待ち` / `降車不要`）と RouteDetail の乗車位置コールアウトのアウトライン。ページ地に 3.45:1 / カード地に 3.03:1（issue #96 / ADR 0004。2:1 の house 閾値を満たす） |
 | `--border-elevated` | `colors.border-elevated` | `#8a8a8a` | カード hover 時のアウトライン（resting `--border-tertiary` より明るい＝ボーダーランプは単調） |
 | `--text-primary` | `colors.text-primary` | `#fafafa` | 本文・主要テキスト |
 | `--text-secondary` | `colors.text-secondary` | `#a1a1a1` | 補助テキスト（タブ非選択・ローディング文言・空状態文言・カードの `N分 · 乗換N回`・`乗換少`・路線ピルの路線名・RouteDetail の種別/行先/距離・`乗車位置` ラベル・`乗換` / `待ち` バッジ） |
-| `--text-tertiary` | `colors.text-tertiary` | `#8a8a8a` | 装飾・最小ウェイト（矢印・フッター・タイムスタンプ・路線名・路線ピル間のシェブロン・`間に合いません` バッジ）。**WCAG AA 達成値**（ADR 0003 D-E） |
+| `--text-tertiary` | `colors.text-tertiary` | `#8a8a8a` | 装飾・最小ウェイト（矢印・フッター・タイムスタンプ・路線ピル間のシェブロン・`間に合いません` バッジ）。**WCAG AA 達成値**（ADR 0003 D-E） |
 | `--bg-inverted` | `colors.bg-inverted` | `#fafafa` | 選択中タブ（反転チップ）の地。屋外グレア下で選択状態が唯一残る近白面（ADR 0004。地に `--text-*` を塗らないための専用ロール）。路線ピルの白い円の地（ADR 0008 D-2） |
 | `--text-inverted` | `colors.text-inverted` | `#0a0a0a` | 選択中タブ（反転チップ）のラベル。近白地に対し 18.97:1（ADR 0004）。路線ピルの円内の英字コード |
 | `--accent-blue` | `colors.accent-blue` | `#3b82f6` | 到着時刻（`HH:MM着`）・カードの `最速` ラベル・ロゴ・タイムライン dot・active ボーダー・focus リング |
@@ -420,14 +420,14 @@ components:
 - 字間 `letter-spacing: -0.02em` は **Latin/数字のみ**に適用（`.title`、`.departure`）。CJK には掛けていない。
 - **CJK 本文の行間・禁則（実装済み。Typography の Gaps からクローズ）。** 日本語ラベル（駅名・路線名・タブ）は
   `line-height: 1.6`（`body` の `1.5` を局所的に上書き）・`word-break: normal`・`line-break: strict` を持つ。適用先は
-  `App.module.css` の `.tab` / `.station`、`RouteDetail.module.css` の `.station` / `.stationIntermediate` / `.lineName` /
+  `App.module.css` の `.tab` / `.station`、`RouteDetail.module.css` の `.station` / `.stationIntermediate` /
   `.legMeta` / `.carLabel` / `.carValue` / `.badge`、
   `TransitCard.module.css` の `.duration` / `.countdown` / `.badge`、`LinePill.module.css` の `.name`。
-  これらに `letter-spacing` は掛けない。**`word-break: break-word` は `.rawRoute`（生 `<pre>` フォールバック）専用**で、
-  駅名・路線名には波及させない（mid-glyph 折返しを防ぐ）。Playwright は computed 値（`line-break` / 行間比 /
-  `letter-spacing` / `word-break`）と、`break-word` が `.rawRoute` に閉じていることを固定する。
+  これらに `letter-spacing` は掛けない。**`word-break: break-word` を宣言するスタイルシートは無い**ので、
+  駅名・路線名が mid-glyph で折り返すことはない。Playwright は computed 値（`line-break` / 行間比 /
+  `letter-spacing` / `word-break`）を固定する。
   ただし `word-break: normal` と `letter-spacing: normal` は**CSS の初期値でもある**（宣言はグローバル上書きに対する
-  前向きのガードで、テストが落ちるのは `line-break` / 行間 / `.rawRoute` の分離が壊れたとき）。
+  前向きのガードで、テストが落ちるのは `line-break` / 行間が壊れたとき）。
 - 縦書きは使用しない。
 
 ### Gaps & Proposals（日本語タイポグラフィのフル規範）
@@ -546,8 +546,7 @@ components:
 - `.headerContent` / `.container`: `max-width: 600px; margin: 0 auto`、padding `--space-4`。
 - `.titleGroup`: ロゴ `Train`（size 20, weight bold, 色 `--accent-blue`）+ `.title`（`Transit`、`--font-size-lg`/`600`、`letter-spacing: -0.02em`）。
 - `.tabs`: `display: flex; gap: --space-1; flex: 1; overflow-x: auto`（出発地タブを横スクロール）。
-  **`role="tablist"`**（`aria-label="出発駅"`。issue #122 / ADR 0007 D-2）。タブは `origins` から描画し、`origins` が
-  空（構造化部分が検証で落ちた）ときだけ旧 `routes` の出発地へフォールバックする（要約行なし）。
+  **`role="tablist"`**（`aria-label="出発駅"`。issue #122 / ADR 0007 D-2）。タブは `origins` からサーバーの設定順に描画する。
 - `.tab`: `inline-flex`（**`flex-direction: column`**、`align-items: center; justify-content: center`）、**`flex: 0 0 auto`**、
   **`min-width` / `min-height: 44px`**（タッチターゲット。Layout 参照）。
   `flex: 0 0 auto` は必須: flex アイテムの既定 `min-width: auto`（＝内容幅の下限）が `.tabs` の `overflow-x: auto`
@@ -583,10 +582,10 @@ components:
   `:disabled` は `opacity: 0.5; cursor: not-allowed`。
   ローディング中は `Spinner`（16）を回し、通常は `ArrowClockwise`（16）。
 - `.spinner`（`spin` 1s linear infinite）は **`@media (prefers-reduced-motion: reduce)` で `animation: none`**。
-- `.content`: 5 分岐の器（issue #121。`hasCards` = 選択中出発地のカードが 1 枚以上、`hasData` = 出発地タブが 1 つ以上。カードは `origins` の
-  候補を `candidateToRoute()` で旧文字列形に書き出して描き、`origins` が空のときだけ旧 `routes` を描く）:
+- `.content`: 5 分岐の器（issue #121。`hasCards` = 選択中出発地のカードが 1 枚以上、`hasData` = 出発地タブが 1 つ以上。カードは選択中出発地の
+  `origins[].candidates` をそのまま `TransitCard` に渡して描く）:
   エラー×データ無し（バナーのみ）/ エラー×既存データ（バナー + 直前のカード）/ loading / empty / 通常（カード）。
-  **エラーでもカードを隠さない**: `useTransit` は失敗時に直前の `origins` / `originRoutes` を保持するので、カードは
+  **エラーでもカードを隠さない**: `useTransit` は失敗時に直前の `origins` を保持するので、カードは
   `hasCards` だけで描画し、バナーはその上に重ねる（ADR 0007 D-2）。
   うち**状態3分岐（error / loading / empty）だけ**を `.status`（**常設の `aria-live="polite"`**）で包む。分岐ノードは
   文言ごと条件マウントされるため、差し替えを読み上げさせるには**それらより長生きするコンテナ**側に live region を
@@ -624,13 +623,12 @@ components:
   **明るい**。旧 `--border-secondary` #333333 は今や resting より暗く、残すと hover がカードを暗く沈ませる逆ランプになる。issue #96 / ADR 0004）。
 - `.header`（button）: `align-items: flex-start`、`gap: --space-4`、padding `--space-4`、`background: none; border: none; font: inherit`、`aria-expanded={expanded}`。
   中身は `.summary`（縦積み 3 行、`gap --space-2`、`flex: 1; min-width: 0`）と `.expandIcon`。ボタン内なので全てフレージング要素（`span`）で組む。
-  props は `route`（旧文字列形。時刻・所要・乗換回数と、旧 `routes` フォールバック時の展開 `RouteDetail`）・`isNext`・任意の `structured`
-  （`{ candidate, walkMinutes }`。構造化候補のときだけ渡し、カウントダウン・ラベル・路線ピルはこれがあるときだけ描く。issue #123。
-  展開時は `candidate` を `RouteDetail` にも渡し、構造化経路を描かせる。issue #124）。
-- 1 行目 `.lead`: **出発時刻 `.departure` が主役**（`--font-size-3xl` = 28px/`600`/`--font-mono`/`letter-spacing: -0.02em`/`line-height: 1.2`。
+  props は `candidate`（構造化候補 `Candidate`。時刻・所要・乗換回数・ラベル・路線ピルの元）・`walkMinutes`（その出発地の徒歩分。カウントダウン用。issue #123）・`isNext`。
+  展開時は `candidate` を `RouteDetail` に渡し、構造化経路を描かせる（issue #124）。
+- 1 行目 `.lead`: **出発時刻 `.departure` が主役**（`departureAt` を `formatClockTime()` で `HH:MM`。`--font-size-3xl` = 28px/`600`/`--font-mono`/`letter-spacing: -0.02em`/`line-height: 1.2`。
   `components.departure-time`）+ カウントダウンバッジ `.countdown`（下記）。
 - 2 行目 `.meta`: 到着 `.arrival` `HH:MM着`（`--font-size-xl`/`600`/`--font-mono`、色 `--accent-blue`）、`.duration` `N分 · 乗換N回`
-  （`parseSummary()` の所要・乗換回数。`--font-size-sm`、`--text-secondary`）、ラベル `.badge` `最速`（`isFastest`。`.badgeFastest` で色 `--accent-blue`）/
+  （`formatDuration(durationMinutes)` と `transferCount`。`--font-size-sm`、`--text-secondary`）、ラベル `.badge` `最速`（`isFastest`。`.badgeFastest` で色 `--accent-blue`）/
   `乗換少`（`isFewestTransfers`）。バッジは**アウトライン idiom**（地 `transparent`・`1px solid --border-tertiary`。`components.badge-border`）、
   `--radius-sm`、`--font-size-xs`/`500`、色 `--text-secondary`、CJK 体裁（`line-height: 1.6`・`word-break: normal`・`line-break: strict`）。
   旧 `--bg-tertiary` #171717 塗りは引き上げたカード地 #1a1a1a に対し 1.03:1 でカードより暗く沈むため、未選択 `.tab` と同じアウトライン idiom に寄せた（issue #96）。ラベルはカード地 #1a1a1a で 6.74:1。
@@ -643,7 +641,6 @@ components:
   padding `--space-1 --space-2`、`--radius-sm`、`--font-size-sm`/`600`、CJK 体裁。文言が状態を運ぶので色だけに頼らない。
   **一覧は取得したまま**: 刻みごとにバッジの文言が変わるだけで、カードの並べ替え・除去はしない（`間に合いません` の便も残る）。
   文字のコントラスト（緑・減光はカード地に、amber は tint をカード地に合成した面に 4.5:1 以上）を Vitest が `.countdown*` 宣言から固定する。
-  旧 `routes` フォールバックのカードはバッジ・ラベル・路線ピルを持たない（時刻・所要・乗換回数のみ）。
 - `.expandIcon`: `CaretUp`（展開時）/ `CaretDown`（折りたたみ時）、16、色 `--text-tertiary`。
 - `.body`: padding `0 --space-4 --space-4`、`RouteDetail` を内包。
 - **最速マーカー `.cardNext`**（issue #97 / ADR 0004 D-3、ADR 0006 D-4 で改定・issue #122）: **到着が最も早い候補**
@@ -653,13 +650,12 @@ components:
   影は Elevation & Depth で全面禁止）。`pointer-events: none` 必須: 擬似要素のヒットテストは `.card` に落ちるため、
   無いと 4px 帯が `.header` ボタンへのクリックを飲み込む。
   **マーク対象はデータから導出し、カード位置から推定しない**（ADR 0004 D-3 は維持）。導出元が最早出発
-  （旧 `deriveNextIndex()`、削除済み）からサーバーの `isFastest` に変わった。旧 `routes` へのフォールバック時は
-  フラグが無いのでマークしない。屋外 20% グレア veil 下で青は ~1.92:1 まで潰れるため、マーカーは単独キャリアではない:
+  （旧 `deriveNextIndex()`、削除済み）からサーバーの `isFastest` に変わった。屋外 20% グレア veil 下で青は ~1.92:1 まで潰れるため、マーカーは単独キャリアではない:
   既定展開と `visually-hidden` ラベルが冗長キューを担う（ADR 0004 の honest limits）。
   擬似要素は支援技術に見えないため、`isNext` のとき `.header` ボタン内に
   `<span className="visually-hidden">最速の便 </span>`（グローバル `index.css` のユーティリティ）を置く。
-- **最速カード（`isNext`）は既定で展開**（フォールバック時は全カード折りたたみ）（`useState(isNext)`）。カードの `key` は位置ではなく列車の同一性
-  （`` `${activeOrigin}-${departureTime}-${index}` ``）: React は key でインスタンスを再利用し `useState` の初期化子は
+- **最速カード（`isNext`）は既定で展開**（`useState(isNext)`）。カードの `key` は位置ではなく列車の同一性
+  （`` `${activeOrigin}-${departureAt}-${index}` ``）: React は key でインスタンスを再利用し `useState` の初期化子は
   マウント時しか走らないため、`key={index}` ではタブ切替・リフレッシュ後にマーカーと展開カードがズレる。
 
 #### LinePill（`LinePill.tsx` / `LinePill.module.css`）
@@ -677,8 +673,7 @@ components:
 #### RouteDetail（`RouteDetail.tsx` / `RouteDetail.module.css`）
 
 - `.container`: padding `--space-3 --space-4`、地 `--bg-tertiary`、`--radius-sm`。
-- props は `route`（旧文字列形）と任意の `candidate`（構造化候補）。`candidate` があり `legs` が 1 本以上なら**構造化経路**を、
-  無ければ旧文字列の**タイムライン**を描く（旧 `routes` フォールバックが残るため。ADR 0006 D-3）。
+- props は `candidate`（構造化候補）のみ。常に下記の**構造化経路**を描く（旧 `routes` と文字列のタイムラインは issue #125 で削除。ADR 0006 D-3）。
 - **構造化経路**（issue #124）: `.route` = `<ol>`。stop 行 `.stopRow` と leg 行 `.legRow` を経路順に交互に並べ、各 `<li>` は
   共通の 3 列グリッド（時刻列 `--space-12 + --space-2` 幅・マーカー列 `12px`・本文。`column-gap: --space-3`）。
   - 時刻列 `.times`（`--font-mono`/`--font-size-sm`/`600`/`--text-primary`、右寄せ）: 始発は `HH:MM発`、乗換駅は前 leg の
@@ -697,15 +692,12 @@ components:
     `乗換` の代わりに `降車不要` チップ（`.badgeThrough`、地 `--bg-elevated`・色 `--text-primary`）を出し、乗り換えが無いので
     `余裕なし` は出さない（`待ち N分` は停車時間として残す）。文言が状態を運ぶので色だけに頼らない。
   - `tests/RouteDetail.test.tsx` が `<ol>` の行構成・区間ごとの時刻・種別/行先/距離・乗車位置 3 形式・レールのクラス・
-    `余裕なし` / `降車不要` の出し分け・旧タイムラインと生 `<pre>` を固定する。
-- **旧タイムライン**（`candidate` なし）: `.timeline` = `<ol>`。`.dotTerminal`（始発・終着）= `8px` 塗り `--accent-blue` dot（frontmatter `components.route-timeline-dot`）。
+    `余裕なし` / `降車不要` の出し分け・leg の無い候補の描画を固定する。
+- **stop の dot**: `.dotTerminal`（始発・終着）= `8px` 塗り `--accent-blue` dot（frontmatter `components.route-timeline-dot`）。
   `.dotTransfer`（乗換）= `8px` 中空 dot（`background: transparent; border: 2px solid --accent-blue`）。両者 `margin-top: 4px`。
-- `.line`: `width: 2px` のコネクタ、色 `--border-secondary`（`components.route-timeline-line`）、最終 stop 以外に描画（旧タイムラインのみ）。
 - `.station`（terminal）`--font-size-base`/`500`、`.stationIntermediate` `--font-size-sm`/`500`、ともに `--text-primary`。
-- `.lineName`: 路線名（旧タイムラインのみ）、`--font-size-xs`、色 `--text-tertiary`、左罫 `2px solid --border-secondary`、`padding-left: --space-2`。
-- **生 `<pre>` フォールバック**: 旧タイムラインで `parseRoute()` が 0 件のとき `.rawRoute`（`--font-mono`/`--font-size-xs`/`--text-secondary`/
-  `white-space: pre-wrap`/`word-break: break-word`/`line-height: 1.6`）で生文字列をそのまま表示。サーバーは候補ごとに leg を
-  1 本以上出す（`src/parse.mjs` の `parseCandidate()`）。leg の無い候補が届いた場合も旧タイムライン側に落ちる。
+- サーバーは候補ごとに leg を 1 本以上出す（`src/parse.mjs` の `parseCandidate()`）。leg の無い候補が届いた場合は、
+  同じ `.route` の中に唯一の stop を終着扱いの 1 行（時刻・レールなし）で描く。
 
 #### StatusIndicator（`StatusIndicator.tsx` / `StatusIndicator.module.css`）
 
@@ -866,10 +858,11 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 （どちらも `prefers-reduced-motion: reduce` で停止）。タッチターゲット: 44×44（refresh と `更新` は `::after`、タブと `再試行` は
 `min-width`/`min-height`）。ブレークポイント: `max-width: 480px` の 1 本のみ。
 
-### B. 主要 UI 状態（Key UI States）— 実在する19状態
+### B. 主要 UI 状態（Key UI States）— 実在する17状態（#13・#14 は欠番）
 
 コードから抽出した実 UI 状態。ADR 0007 D-2 が旧「14状態以外を発明しない」規則を開き、#15〜#18 を足した。#19 は ADR 0006 D-2（クライアント時刻に依存する値はフロントエンドが計算する）に基づく。
-**新しい状態は ADR で正当化してから足す**（スケルトン・カード別エラー等は存在しない）。
+**新しい状態は ADR で正当化してから足す**（スケルトン・カード別エラー等は存在しない）。#13・#14 は旧 `routes` の文字列表示に固有の状態で、
+issue #125 の旧 `routes` 削除とともに消えた（番号は他所からの参照を保つため詰めない）。
 
 | # | 状態 | 根拠 |
 |---|---|---|
@@ -877,21 +870,21 @@ Phosphor アイコン（**全て `size` prop で寸法指定**）: `Train`(20,bo
 | 2 | エラーバナー・カード無し（固定 `サーバーに接続できません` + `再試行`、`role="alert"`。タブがあれば `表示中は HH:MM 時点のデータです` も出す。hook の error 文字列は非表示） | `App.tsx` `error && !hasCards` / `.error` |
 | 3 | リフレッシュ中（refresh ボタン内 `Spinner` 16・既存カードは残る） | `App.tsx` `refreshButton disabled={loading}` |
 | 4 | 空状態（選択中の出発地にカードが無い・`lastUpdated` あり・`error=null`、タブが無ければ `loading=false` → `.empty` カード `Tray`(24) + `取得できず` / `便なし` / `No departures found`、`role="status"`） | `App.tsx` `.empty` / `components.empty-state` |
-| 5 | 最速カード既定展開＋左キーライン（サーバーの `isFastest` 候補。旧 `routes` フォールバック時はマークなし） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `isNext: candidate.isFastest` / `.cardNext` |
+| 5 | 最速カード既定展開＋左キーライン（サーバーの `isFastest` 候補） | `TransitCard.tsx` `useState(isNext)` / `App.tsx` `isNext: candidate.isFastest` / `.cardNext` |
 | 6 | カード展開／折りたたみ | `TransitCard.tsx` `expanded` トグル |
 | 7 | タブ active（`aria-selected="true"`・`tabindex="0"`） | `App.module.css` `.tabActive` |
 | 8 | タブ inactive（`aria-selected="false"`・`tabindex="-1"`） | `.tab` 既定 |
 | 9 | status: ok（緑ドット・隠しラベル `サーバー接続: 正常`） | `StatusIndicator.tsx` `status === 'ok'` |
 | 10 | status: error（赤ドット・隠しラベル `サーバー接続: エラー`） | `status === 'error'` |
 | 11 | status: loading（pulse するドット・隠しラベル `サーバー接続: 確認中`） | `status === 'loading'` |
-| 12 | RouteDetail タイムライン（始発終着 = 塗り dot / 乗換 = 中空 dot。構造化候補では路線レール・区間時刻・乗車位置・`乗換` / `待ち` / `余裕なし` / `降車不要` バッジを持つ `<ol>`） | `RouteDetail.tsx` `StructuredRoute` / 旧 `isTerminal` |
-| 13 | RouteDetail 生 `<pre>` フォールバック（旧 `routes` のカードのみ） | `parseRoute()` が 0 件のとき `.rawRoute` |
-| 14 | 不正サマリ（`--:--` / `--` 表示） | `parseSummary()` の既定値 |
+| 12 | RouteDetail タイムライン（始発終着 = 塗り dot / 乗換 = 中空 dot。路線レール・区間時刻・乗車位置・`乗換` / `待ち` / `余裕なし` / `降車不要` バッジを持つ `<ol>`） | `RouteDetail.tsx` `StructuredRoute` |
+| 13 | ~~RouteDetail 生 `<pre>` フォールバック~~ → **削除**（issue #125） | — |
+| 14 | ~~不正サマリ（`--:--` / `--` 表示）~~ → **削除**（issue #125。時刻・所要は検証済みの構造化値から描く） | — |
 | 15 | データ鮮度切れ（最後の成功取得から 180 秒以上 → amber ピル `N分前のデータ` + `更新`。未満は `N秒前に更新` / `N分前に更新`） | `StatusIndicator.tsx` `isStale()` / `.stale` / `components.stale-pill` |
 | 16 | エラーバナー・既存データあり（`サーバーに接続できません` + `表示中は HH:MM 時点のデータです` + `再試行`、直前のカードは表示したまま） | `App.tsx` `error && hasCards` / `.error` + `.cards` |
 | 17 | 出発地ごとの結果（タブ 2 行目: `HH:MM着` + `最速` / `+N分`、`status: error` → `取得できず`、`no_candidates` → `便なし`） | `App.tsx` `tabSummary()` / `.tabSummary` |
 | 18 | 出発地の自動選択（`fastestOrigin`、`null` なら先頭。手動選択は次の成功取得まで保持） | `App.tsx` `heldOrigin ?? autoOrigin` |
-| 19 | 出発カウントダウン（`あとN分で出る` 緑 / `今すぐ出発` amber（0〜1 分）/ `間に合いません` 減光（負）。構造化候補のカードのみ、一覧は並べ替えない。ADR 0006 D-2 のクライアント側時刻値） | `TransitCard.tsx` `leaveCountdown()` / `.countdown*` |
+| 19 | 出発カウントダウン（`あとN分で出る` 緑 / `今すぐ出発` amber（0〜1 分）/ `間に合いません` 減光（負）。一覧は並べ替えない。ADR 0006 D-2 のクライアント側時刻値） | `TransitCard.tsx` `leaveCountdown()` / `.countdown*` |
 
 横断挙動（独立した状態ではない）: 長い日本語名の折返し（`line-break: strict` / `word-break: normal`）/
 タブ多数時の横スクロール（`overflow-x: auto`）/ `@media (max-width: 480px)` リフロー / refresh ボタンの押下

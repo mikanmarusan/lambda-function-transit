@@ -1,14 +1,12 @@
 import { Fragment } from 'react'
-import { parseRoute, type Candidate, type Leg, type LineCode, type Stop } from '../types/transit'
+import type { Candidate, Leg, LineCode, Stop } from '../types/transit'
 import { formatClockTime } from '../lib/time'
 import { LinePill } from './LinePill'
 import styles from './RouteDetail.module.css'
 
 interface RouteDetailProps {
-  /** The legacy route string: drawn only when no structured `candidate` is given. */
-  route: string
-  /** The structured candidate behind `route`; when present it replaces the legacy timeline. */
-  candidate?: Candidate
+  /** The structured candidate whose stops and legs the expanded route draws. */
+  candidate: Candidate
 }
 
 /**
@@ -109,49 +107,10 @@ function StructuredRoute({ candidate }: { candidate: Candidate }) {
   )
 }
 
-export function RouteDetail({ route, candidate }: RouteDetailProps) {
-  if (candidate && candidate.legs.length > 0) {
-    return (
-      <div className={styles.container}>
-        <StructuredRoute candidate={candidate} />
-      </div>
-    )
-  }
-
-  // Legacy path (ADR 0006 D-3): the card came from `routes` alone, so only the strings exist.
-  const stations = parseRoute(route)
-
-  if (stations.length === 0) {
-    return (
-      <div className={styles.container}>
-        <pre className={styles.rawRoute}>{route}</pre>
-      </div>
-    )
-  }
-
+export function RouteDetail({ candidate }: RouteDetailProps) {
   return (
     <div className={styles.container}>
-      <ol className={styles.timeline}>
-        {stations.map((item, index) => {
-          const terminal = item.isTerminal
-          return (
-            <li key={index} className={terminal ? styles.stop : styles.stopIntermediate}>
-              <div className={styles.marker}>
-                <div className={terminal ? styles.dotTerminal : styles.dotTransfer} />
-                {index < stations.length - 1 && <div className={styles.line} />}
-              </div>
-              <div className={terminal ? styles.content : styles.contentIntermediate}>
-                <span className={terminal ? styles.station : styles.stationIntermediate}>
-                  {item.station}
-                </span>
-                {item.line && (
-                  <span className={styles.lineName}>{item.line}</span>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ol>
+      <StructuredRoute candidate={candidate} />
     </div>
   )
 }

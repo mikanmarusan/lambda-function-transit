@@ -65,7 +65,7 @@ function makeCandidate(first: Partial<Stop> = {}, second: Partial<Stop> = {}, le
   }
 }
 
-const renderDetail = (candidate: Candidate) => render(<RouteDetail route="" candidate={candidate} />)
+const renderDetail = (candidate: Candidate) => render(<RouteDetail candidate={candidate} />)
 
 describe('RouteDetail structured route', () => {
   it('marks the route up as an ordered list of stop and leg rows', () => {
@@ -187,22 +187,15 @@ describe('RouteDetail structured route', () => {
   })
 })
 
-describe('RouteDetail legacy fallback', () => {
-  it('draws the parsed timeline as an ordered list when no candidate is given', () => {
-    const { container } = render(<RouteDetail route={'■六本木一丁目\n｜東京メトロ南北線\n■溜池山王'} />)
-    expect(container.querySelectorAll('ol > li')).toHaveLength(2)
-    expect(screen.getByText('東京メトロ南北線').className).toContain(styles.lineName)
-  })
-
-  it('falls back to the legacy timeline for a candidate with no legs', () => {
+describe('RouteDetail without legs', () => {
+  it('draws a leg-less candidate as its lone terminal stop, with no times and no rail', () => {
     const candidate = { ...makeCandidate(), stops: [stop('六本木一丁目')], legs: [] }
-    const { container } = render(<RouteDetail route={'■六本木一丁目'} candidate={candidate} />)
-    expect(container.querySelector('ol')?.className).toBe(styles.timeline)
+    const { container } = renderDetail(candidate)
+    expect(container.querySelector('ol')?.className).toBe(styles.route)
+    expect(container.querySelectorAll('ol > li')).toHaveLength(1)
+    expect(screen.getByText('六本木一丁目').className).toBe(styles.station)
     expect(container.querySelector('time')).toBeNull()
-  })
-
-  it('keeps the raw <pre> when the legacy string has no stations', () => {
-    const { container } = render(<RouteDetail route="unparseable" />)
-    expect(container.querySelector('pre')?.textContent).toBe('unparseable')
+    expect(container.querySelector(`.${styles.rail}`)).toBeNull()
+    expect(container.querySelector('pre')).toBeNull()
   })
 })
