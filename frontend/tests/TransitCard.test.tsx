@@ -4,6 +4,7 @@ import type { Candidate, Leg, LineCode } from '../src/types/transit'
 import { candidateToRoute } from '../src/types/transit'
 import pillStyles from '../src/components/LinePill.module.css'
 import cardStyles from '../src/components/TransitCard.module.css'
+import detailStyles from '../src/components/RouteDetail.module.css'
 
 /**
  * The redesigned transit card (issue #123): a large departure time, a leave-by countdown badge
@@ -146,6 +147,24 @@ describe('TransitCard line pills', () => {
     expect([...pills].map(pill => pill.textContent)).toEqual(['N東京メトロ南北線', 'KO京王線'])
     // One chevron between the two pills.
     expect(container.querySelectorAll(`.${cardStyles.chevron}`)).toHaveLength(1)
+  })
+})
+
+describe('TransitCard expanded route', () => {
+  it('hands the structured candidate to RouteDetail, which draws the structured route', () => {
+    const { container } = renderCard(LEAVE_AT - 10 * MIN, makeCandidate(), true)
+
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelector('ol')?.className).toBe(detailStyles.route)
+    expect(container.querySelector('time')?.textContent).toBe('18:49発')
+  })
+
+  it('draws the legacy timeline when the card has no structured candidate', () => {
+    clock.now = LEAVE_AT
+    const { container } = render(<TransitCard route={candidateToRoute(makeCandidate())} isNext />)
+
+    expect(container.querySelector('ol')?.className).toBe(detailStyles.timeline)
+    expect(container.querySelector('time')).toBeNull()
   })
 })
 

@@ -23,18 +23,22 @@ const ROUTE_BODY = [
 /** JST instant on the fixture day, the shape every structured timestamp takes (ADR 0006 D-2). */
 const at = (hhmm: string) => `2026-07-13T${hhmm}:00+09:00`
 
-const stop = (station: string) => ({
+const stop = (station: string, transferMinutes: number | null = null, waitMinutes: number | null = null) => ({
   station,
   arrivalPlatform: null,
   departurePlatform: null,
-  transferMinutes: null,
-  waitMinutes: null,
+  transferMinutes,
+  waitMinutes,
   noAlight: false,
 })
 
-/** One structured candidate on the ROUTE_BODY path: 南北線 to 溜池山王, then a 銀座線・半蔵門線 leg. */
+/**
+ * One structured candidate on the ROUTE_BODY path: 南北線 to 溜池山王 (with its train type,
+ * destination, distance and boarding position, and a 乗換 / 待ち transfer there), then a
+ * 銀座線・半蔵門線 leg.
+ */
 function candidate(departure: string, arrival: string, isFastest = false) {
-  const leg = (lineName: string, lineCode: string, from: string, to: string) => ({
+  const leg = (lineName: string, lineCode: string, from: string, to: string, detail = {}) => ({
     lineName,
     lineCode,
     trainType: null,
@@ -45,6 +49,7 @@ function candidate(departure: string, arrival: string, isFastest = false) {
     minutes: 10,
     distanceKm: null,
     carPosition: null,
+    ...detail,
   })
   return {
     departureAt: at(departure),
@@ -53,9 +58,14 @@ function candidate(departure: string, arrival: string, isFastest = false) {
     transferCount: 1,
     isFastest,
     isFewestTransfers: isFastest,
-    stops: [stop(ROPPONGI), stop('溜池山王'), stop(TSUTSUJIGAOKA)],
+    stops: [stop(ROPPONGI), stop('溜池山王', 2, 1), stop(TSUTSUJIGAOKA)],
     legs: [
-      leg('東京メトロ南北線', 'N', departure, departure),
+      leg('東京メトロ南北線', 'N', departure, departure, {
+        trainType: '各停',
+        destination: '浦和美園',
+        distanceKm: 3.1,
+        carPosition: '3・6号車',
+      }),
       leg('東京メトロ銀座線・半蔵門線直通', 'Z', departure, arrival),
     ],
   }
@@ -212,13 +222,14 @@ test.describe('Transit App', () => {
     await page.goto('/')
 
     await expect(page.getByText('18:49', { exact: true })).toBeVisible()
-    // Exact: the selected tab's summary reads `19:38着 最速`, the card `19:38着` alone.
-    await expect(page.getByText('19:38着', { exact: true })).toBeVisible()
+    // Scoped to the card header's arrival: the selected tab's summary reads `19:38着 最速`, and the
+    // expanded route detail repeats `19:38着` as the final arrival (issue #124).
+    await expect(page.locator('[class*="_arrival_"]').getByText('19:38着', { exact: true })).toBeVisible()
   })
 
   test('paints the card outline at the outdoor-legibility border (issue #96)', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('18:49')).toBeVisible()
+    await expect(page.getByText('18:49', { exact: true })).toBeVisible()
 
     // The card fill rises to --bg-elevated (#1a1a1a) and the outline to --border-tertiary
     // (#666666), so the card keeps a perceivable edge under outdoor glare (ADR 0004).
@@ -238,7 +249,7 @@ test.describe('Transit App', () => {
 
     await tokyo.click()
     await expect(tokyo).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByText('18:55')).toBeVisible()
+    await expect(page.getByText('18:55', { exact: true })).toBeVisible()
   })
 
   test('should display footer with data source', async ({ page }) => {
@@ -267,7 +278,7 @@ test.describe('Error over last-known data (issue #121)', () => {
   test('keeps the cards visible under the banner when a refresh fails', async ({ page }) => {
     await mockApi(page)
     await page.goto('/')
-    await expect(page.getByText('18:49')).toBeVisible()
+    await expect(page.getByText('18:49', { exact: true })).toBeVisible()
 
     await page.unrouteAll({ behavior: 'ignoreErrors' })
     await mockApi(page, { transitStatus: 500, transit: { message: 'boom' } })
@@ -283,7 +294,7 @@ test.describe('Error over last-known data (issue #121)', () => {
     expect(retryBox.height).toBeGreaterThanOrEqual(44)
     // The raw hook error ("HTTP error: 500") never reaches the screen.
     await expect(page.getByText(/HTTP error/)).toHaveCount(0)
-    await expect(page.getByText('18:49')).toBeVisible()
+    await expect(page.getByText('18:49', { exact: true })).toBeVisible()
   })
 })
 
@@ -449,9 +460,15 @@ test.describe('CJK typography', () => {
 
     const tab = page.getByRole('tab', { name: new RegExp(ROPPONGI) })
     const routeStation = page.locator('[class*="station"]').first()
-    const lineName = page.locator('[class*="lineName"]').first()
+    // The expanded fastest card's structured route: its line label, leg meta, boarding position
+    // and transfer badge (issue #124).
+    const route = page.locator('ol[class*="_route_"]').first()
+    const lineName = route.locator('[class*="_name_"]').first()
+    const legMeta = route.locator('[class*="_legMeta_"]').first()
+    const carValue = route.locator('[class*="_carValue_"]').first()
+    const badge = route.locator('[class*="_badge_"]').first()
 
-    for (const target of [tab, routeStation, lineName]) {
+    for (const target of [tab, routeStation, lineName, legMeta, carValue, badge]) {
       await expect(target).toBeVisible()
       expect(await computed(target, 'word-break')).toBe('normal')
       expect(await computed(target, 'line-break')).toBe('strict')
@@ -503,7 +520,7 @@ test.describe('CJK typography', () => {
     await mockApi(page)
     await page.goto('/')
 
-    const lineName = page.locator('[class*="lineName"]').first()
+    const lineName = page.locator('ol[class*="_route_"] [class*="_name_"]').first()
     await expect(lineName).toBeVisible()
 
     const overflow = await lineName.evaluate((el) => {
@@ -511,6 +528,25 @@ test.describe('CJK typography', () => {
       return el.getBoundingClientRect().right - container.getBoundingClientRect().right
     })
     expect(overflow).toBeLessThanOrEqual(0)
+  })
+})
+
+test.describe('Route detail (issue #124)', () => {
+  test('paints each leg rail in its line colour across the full leg row', async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/')
+
+    const route = page.locator('ol[class*="_route_"]').first()
+    await expect(route).toBeVisible()
+    const rail = route.locator('[class*="_rail_"]').first()
+    // --line-n #00ac9b, reached only through the allow-listed .railN class and currentColor.
+    expect(await computed(rail, 'background-color')).toBe('rgb(0, 172, 155)')
+
+    const railBox = await rail.boundingBox()
+    const rowBox = await route.locator('[class*="_legRow_"]').first().boundingBox()
+    expect(railBox!.height).toBeGreaterThan(0)
+    expect(Math.abs(railBox!.height - rowBox!.height)).toBeLessThanOrEqual(1)
+    await expect(route.getByText('3・6号車', { exact: true })).toBeVisible()
   })
 })
 
@@ -590,7 +626,8 @@ test.describe('Transit card redesign (issue #123)', () => {
     await expect(departure).toHaveText('18:49')
     // The 3xl rung (28px).
     expect(await computed(departure, 'font-size')).toBe('28px')
-    await expect(first.getByText('19:38着', { exact: true })).toBeVisible()
+    // The header's arrival, not the expanded route detail's final `19:38着` (issue #124).
+    await expect(first.locator('[class*="_arrival_"]')).toHaveText('19:38着')
     await expect(first.getByText('49分 · 乗換1回', { exact: true })).toBeVisible()
     await expect(first.getByText('最速', { exact: true })).toBeVisible()
     await expect(first.getByText('乗換少', { exact: true })).toBeVisible()
@@ -702,7 +739,7 @@ test.describe('Station tabs (issue #122, ADR 0007 D-2)', () => {
     await page.keyboard.press('ArrowRight')
     await expect(tab(page, ROPPONGI)).toHaveAttribute('aria-selected', 'true')
     await expect(tab(page, ROPPONGI)).toBeFocused()
-    await expect(page.getByText('18:49')).toBeVisible()
+    await expect(page.getByText('18:49', { exact: true })).toBeVisible()
 
     await page.keyboard.press('ArrowLeft')
     await expect(tab(page, TAMEIKE)).toBeFocused()
