@@ -1,7 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { getSummary, getRoute, splitRoutes, handler, extractJsRedirect, isAllowedUrl, buildDepartureParams, buildSearchUrl } from '../src/index.mjs';
+import { splitRoutes, handler, extractJsRedirect, isAllowedUrl, buildDepartureParams, buildSearchUrl } from '../src/index.mjs';
 
 // Mock HTML block matching real Jorudan format (■ for terminal, ◇ for transfer stations)
 const mockBlock = `発着時間：06:30発 → 08:45着\r\n所要時間：2時間15分\r\n乗換回数：2回\r\n\r\n■六本木一丁目    1番線発\r\n｜ 　東京メトロ南北線(浦和美園行)   3.1km\r\n｜06:30-06:36［6分］\r\n｜178円\r\n◇永田町    3番線着・1番線発 ［乗換4分+待ち4分］\r\n｜ 　東京メトロ半蔵門線(中央林間行)   5.7km\r\n｜06:44-06:53［9分］\r\n｜ ↓\r\n◇渋谷    1番線着・1番線発 ［乗換6分+待ち4分］\r\n｜ 　京王井の頭線(吉祥寺行)   12.5km\r\n｜07:03-07:20［17分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
@@ -9,12 +9,11 @@ const mockBlock = `発着時間：06:30発 → 08:45着\r\n所要時間：2時�
 // Second mock block for multiple candidates testing
 const mockBlock2 = `発着時間：07:00発 → 09:00着\r\n所要時間：2時間\r\n乗換回数：1回\r\n\r\n■新宿    1番線発\r\n｜ 　京王線(京王八王子行)   12.5km\r\n｜07:00-07:20［20分］\r\n｜230円\r\n■つつじヶ丘（東京）    1・2番線着`;
 
-// Third mock block for MAX_CANDIDATES testing
+// Third mock block (with mockBlock4, one of the four candidates that prove the MAX_CANDIDATES cap)
 const mockBlock3 = `発着時間：08:00発 → 10:00着\r\n所要時間：2時間\r\n乗換回数：0回\r\n\r\n■渋谷    1番線発\r\n｜ 　京王井の頭線(吉祥寺行)   4.9km\r\n｜08:00-08:10［10分］\r\n■明大前    1番線着`;
 
 // Combined blocks for multiple candidates
 const mockMultipleBlocks = `${mockBlock}${mockBlock2}`;
-const mockThreeBlocks = `${mockBlock}${mockBlock2}${mockBlock3}`;
 
 // Helper to create mock headers
 function createMockHeaders(data = {}) {
@@ -60,77 +59,6 @@ function createMockResponse(html) {
     headers: createMockHeaders({}),
   };
 }
-
-describe('getSummary', () => {
-  it('should extract arrival and departure time', () => {
-    const summary = getSummary(mockBlock);
-    assert.ok(summary.includes('06:30発 → 08:45着'), 'Should contain arrival/departure time');
-  });
-
-  it('should extract required time', () => {
-    const summary = getSummary(mockBlock);
-    assert.ok(summary.includes('2時間15分'), 'Should contain required time');
-  });
-
-  it('should extract transfer count', () => {
-    const summary = getSummary(mockBlock);
-    assert.ok(summary.includes('2回'), 'Should contain transfer count');
-  });
-
-  it('should format summary correctly', () => {
-    const summary = getSummary(mockBlock);
-    assert.match(summary, /.*\(.*\)\(.*\)/, 'Should match format: time(duration)(transfers)');
-  });
-
-  it('should handle empty block', () => {
-    const summary = getSummary('');
-    assert.strictEqual(typeof summary, 'string', 'Should return a string');
-  });
-});
-
-describe('getRoute', () => {
-  it('should extract terminal stations', () => {
-    const route = getRoute(mockBlock);
-    assert.ok(route.includes('■六本木一丁目'), 'Should contain start station');
-    assert.ok(route.includes('■つつじヶ丘（東京）'), 'Should contain end station');
-  });
-
-  it('should preserve intermediate transfer stations (◇)', () => {
-    const route = getRoute(mockBlock);
-    assert.ok(route.includes('◇永田町'), 'Should contain transfer station 永田町');
-    assert.ok(route.includes('◇渋谷'), 'Should contain transfer station 渋谷');
-  });
-
-  it('should keep line names and filter out times, fares, arrows', () => {
-    const route = getRoute(mockBlock);
-    // Line names should be kept
-    assert.ok(route.includes('東京メトロ南北線'), 'Should contain line name');
-    assert.ok(route.includes('東京メトロ半蔵門線'), 'Should contain line name');
-    assert.ok(route.includes('京王井の頭線'), 'Should contain line name');
-    // Times, fares, arrows should be filtered out
-    assert.ok(!route.includes('06:30-06:36'), 'Should not contain time info');
-    assert.ok(!route.includes('178円'), 'Should not contain fare info');
-    assert.ok(!route.includes('↓'), 'Should not contain arrow');
-  });
-
-  it('should produce correct number of lines for multi-transfer route', () => {
-    const route = getRoute(mockBlock);
-    const lines = route.split('\n');
-    // 4 stations (■x2 + ◇x2) + 3 line names = 7 lines
-    assert.strictEqual(lines.length, 7, 'Should have 7 lines (4 stations + 3 line names)');
-  });
-
-  it('should remove extra spaces from separator', () => {
-    const blockWithSpaces = `summary\r\n\r\n■六本木一丁目\r\n｜ 　test`;
-    const route = getRoute(blockWithSpaces);
-    assert.ok(!route.includes('｜ 　'), 'Should not contain "｜ 　"');
-  });
-
-  it('should handle empty block', () => {
-    const route = getRoute('');
-    assert.strictEqual(typeof route, 'string', 'Should return a string');
-  });
-});
 
 describe('splitRoutes', () => {
   it('should split multiple routes correctly', () => {
@@ -305,11 +233,11 @@ describe('handler', () => {
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       assert.ok(result.body, 'Should have body');
       const body = JSON.parse(result.body);
-      assert.ok(body.routes, 'Should have routes array');
-      assert.ok(body.routes.length > 0, 'Should have at least one origin route');
-      assert.ok(body.routes[0].transfers, 'First origin should have transfers');
-      assert.ok(body.routes[0].origin, 'First origin should have origin label');
-      assert.ok(body.routes[0].destination, 'First origin should have destination label');
+      assert.strictEqual(body.routes, undefined, 'the legacy routes field is removed');
+      assert.ok(body.origins.length > 0, 'Should have at least one origin');
+      assert.ok(body.origins[0].origin, 'First origin should have origin label');
+      assert.ok(body.origins[0].candidates.length > 0, 'First origin should have candidates');
+      assert.ok(body.destination, 'Should have destination label');
     });
   });
 
@@ -420,19 +348,10 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'Should return status 200');
       const body = JSON.parse(result.body);
-      const firstOrigin = body.routes[0];
-      assert.strictEqual(firstOrigin.transfers.length, 2, 'Should have 2 transfers per origin');
-      assert.ok(firstOrigin.transfers[0][0].includes('06:30'), 'Should contain first route time');
-      assert.ok(firstOrigin.transfers[1][0].includes('07:00'), 'Should contain second route time');
-    });
-  });
-
-  it('should limit legacy routes to LEGACY_MAX_CANDIDATES (2) per origin', async () => {
-    await runWithMockedFetch(createMockResponse(buildHtml(mockThreeBlocks)), async () => {
-      const result = await handler({}, {});
-      assert.strictEqual(result.statusCode, 200, 'Should return status 200');
-      const body = JSON.parse(result.body);
-      assert.strictEqual(body.routes[0].transfers.length, 2, 'Should have only 2 transfers per origin');
+      const { candidates } = body.origins[0];
+      assert.strictEqual(candidates.length, 2, 'Should have 2 candidates per origin');
+      assert.ok(candidates[0].departureAt.includes('T06:30:00'), 'Should contain first route time');
+      assert.ok(candidates[1].departureAt.includes('T07:00:00'), 'Should contain second route time');
     });
   });
 
@@ -441,7 +360,7 @@ describe('handler', () => {
       const result = await handler({}, {});
       assert.strictEqual(result.statusCode, 200, 'a page with no route is not a failure');
       const body = JSON.parse(result.body);
-      assert.deepStrictEqual(body.routes, [], 'legacy routes keeps its shape with no origin');
+      assert.strictEqual(body.routes, undefined, 'the legacy routes field is removed');
       assert.strictEqual(body.fastestOrigin, null);
       assert.deepStrictEqual(body.origins.map(o => o.status), ['no_candidates', 'no_candidates', 'no_candidates']);
       for (const o of body.origins) assert.deepStrictEqual(o.candidates, []);
@@ -459,30 +378,19 @@ describe('handler', () => {
     });
   });
 
-  it('should return routes array with origin, destination, and transfers', async () => {
+  it('should return exactly the generatedAt, destination, fastestOrigin and origins keys', async () => {
     await runWithMockedFetch(createMockResponse(validHtml), async () => {
       const result = await handler({}, {});
       const body = JSON.parse(result.body);
-      assert.ok(Array.isArray(body.routes), 'routes should be an array');
-      assert.ok(body.routes.length > 0, 'routes should have at least one origin');
-      const firstOrigin = body.routes[0];
-      assert.ok(typeof firstOrigin.origin === 'string', 'origin should be a string');
-      assert.ok(typeof firstOrigin.destination === 'string', 'destination should be a string');
-      assert.ok(Array.isArray(firstOrigin.transfers), 'transfers should be an array');
-      assert.ok(firstOrigin.transfers.length > 0, 'transfers should have at least one element');
-      assert.ok(Array.isArray(firstOrigin.transfers[0]), 'Each transfer should be an array');
-      assert.strictEqual(firstOrigin.transfers[0].length, 2, 'Each transfer should have 2 elements [summary, route]');
+      assert.deepStrictEqual(Object.keys(body).sort(), ['destination', 'fastestOrigin', 'generatedAt', 'origins']);
     });
   });
 
-  it('should return 3 origin routes', async () => {
+  it('should return 3 origins in config order', async () => {
     await runWithMockedFetch(createMockResponse(validHtml), async () => {
       const result = await handler({}, {});
       const body = JSON.parse(result.body);
-      assert.strictEqual(body.routes.length, 3, 'Should have 3 origin routes');
-      assert.strictEqual(body.routes[0].origin, '六本木一丁目');
-      assert.strictEqual(body.routes[1].origin, '神谷町');
-      assert.strictEqual(body.routes[2].origin, '麻布十番');
+      assert.deepStrictEqual(body.origins.map(o => o.origin), ['六本木一丁目', '神谷町', '麻布十番']);
     });
   });
 });
@@ -512,10 +420,9 @@ describe('handler — structured origins field', () => {
     }
   }
 
-  it('adds generatedAt, destination, fastestOrigin and per-origin results next to routes', async () => {
+  it('returns generatedAt, destination, fastestOrigin and per-origin results', async () => {
     const { result, body } = await runAt('2026-10-01T06:20:30+09:00', async () => createMockResponse(unsortedHtml));
     assert.strictEqual(result.statusCode, 200);
-    assert.ok(Array.isArray(body.routes), 'legacy routes must stay');
     assert.strictEqual(body.generatedAt, '2026-10-01T06:20:30+09:00');
     assert.strictEqual(body.destination, 'つつじヶ丘（東京）');
     assert.strictEqual(body.fastestOrigin, '六本木一丁目', 'ties go to config order');
@@ -552,8 +459,6 @@ describe('handler — structured origins field', () => {
         [null, '2026-10-01T07:03:00+09:00', '2026-10-01T07:20:00+09:00'],
       ],
     );
-    // The legacy field is unchanged: Jorudan order, at most 2.
-    assert.deepStrictEqual(body.routes[0].transfers.map(([summary]) => summary.slice(0, 5)), ['08:00', '07:00']);
   });
 
   it('names the origin whose best candidate arrives first as fastestOrigin', async () => {
@@ -572,7 +477,6 @@ describe('handler — structured origins field', () => {
     assert.strictEqual(kamiyacho.status, 'error');
     assert.deepStrictEqual(kamiyacho.candidates, []);
     assert.deepStrictEqual(body.origins.map(o => o.status), ['ok', 'error', 'ok']);
-    assert.strictEqual(body.routes.length, 2);
   });
 
   it('marks an origin whose route blocks all fail to parse as error', async () => {
@@ -592,15 +496,13 @@ describe('handler — structured origins field', () => {
     assert.strictEqual(body.fastestOrigin, null);
   });
 
-  it('keeps answering 200 with legacy routes when only the structured parse fails everywhere', async () => {
+  it('returns 500 when the structured parse fails at every origin', async () => {
     // Jorudan markup drift the strict parser rejects (a summary whose duration
-    // disagrees with its times) must not take down the legacy field.
+    // disagrees with its times): with no legacy field left, nothing can be served.
     const driftedHtml = buildHtmlFrom(mockBlock.replace('所要時間：2時間15分', '所要時間：3時間'));
     const { result, body } = await runAt('2026-10-01T06:20:00+09:00', async () => createMockResponse(driftedHtml));
-    assert.strictEqual(result.statusCode, 200);
-    assert.strictEqual(body.routes.length, 3);
-    assert.deepStrictEqual(body.origins.map(o => o.status), ['error', 'error', 'error']);
-    assert.strictEqual(body.fastestOrigin, null);
+    assert.strictEqual(result.statusCode, 500);
+    assert.ok(body.error);
   });
 
   it('returns 500 when every origin is error', async () => {
@@ -682,8 +584,8 @@ describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router 
       const result = await handler({ path: '/transit' }, {});
       assert.strictEqual(result.statusCode, 200);
       const data = JSON.parse(result.body);
-      assert.strictEqual(data.routes.length, 3, 'all 3 origins should succeed');
-      assert.ok(data.routes[0].transfers.length > 0, 'should have parsed transfers');
+      assert.deepStrictEqual(data.origins.map(o => o.status), ['ok', 'ok', 'ok'], 'all 3 origins should succeed');
+      assert.ok(data.origins[0].candidates.length > 0, 'should have parsed candidates');
     });
   });
 
@@ -765,8 +667,7 @@ describe('handler — full jrd_uuid handshake (URL-keyed cookie-stateful router 
       const result = await handler({ path: '/transit' }, {});
       assert.strictEqual(result.statusCode, 200);
       const data = JSON.parse(result.body);
-      assert.strictEqual(data.routes.length, 2, 'two origins should still succeed');
-      assert.ok(!data.routes.some(r => r.origin === '六本木一丁目'), 'failed origin should be absent');
+      assert.deepStrictEqual(data.origins.map(o => o.status), ['error', 'ok', 'ok'], 'two origins should still succeed');
       const failed = data.origins.find(o => o.origin === '六本木一丁目');
       assert.strictEqual(failed.status, 'error', 'failed origin is reported as error in origins');
       assert.deepStrictEqual(failed.candidates, []);

@@ -64,3 +64,11 @@ const CLOCK_FORMAT = new Intl.DateTimeFormat('ja-JP', {
 export function formatClockTime(ms: number): string {
   return CLOCK_FORMAT.format(ms)
 }
+
+/** A whole-minute duration in Jorudan's own spelling: `M分` under an hour, else `N時間` or `N時間M分`. */
+export function formatDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes}分`
+  return minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`
+}

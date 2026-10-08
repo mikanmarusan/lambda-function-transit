@@ -16,24 +16,8 @@ describe('E2E Tests', () => {
       const body = JSON.parse(result.body);
 
       if (result.statusCode === 200) {
-        // Verify JSON structure for success case
-        assert.ok(body.routes, 'Should have routes array');
-        assert.ok(Array.isArray(body.routes), 'routes should be an array');
-        assert.ok(body.routes.length > 0, 'Should have at least one origin route');
-
-        // Each origin route should have origin, destination, transfers
-        const firstOrigin = body.routes[0];
-        assert.ok(firstOrigin.origin, 'Should have origin label');
-        assert.ok(firstOrigin.destination, 'Should have destination label');
-        assert.ok(Array.isArray(firstOrigin.transfers), 'transfers should be an array');
-        assert.ok(firstOrigin.transfers.length > 0, 'Should have at least one transfer');
-        assert.ok(firstOrigin.transfers.length <= 2, 'Should have at most 2 transfers per origin');
-
-        // Each transfer should be [summary, route]
-        const [summary, route] = firstOrigin.transfers[0];
-        assert.ok(typeof summary === 'string', 'Summary should be a string');
-        assert.ok(typeof route === 'string', 'Route should be a string');
-        assert.ok(summary.includes('('), 'Summary should contain parentheses');
+        // The legacy `routes` field is gone; only the structured origins contract remains.
+        assert.strictEqual(body.routes, undefined, 'routes should no longer be returned');
 
         // Structured origins field (ADR 0006 D-2)
         const ISO_JST = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/;
@@ -77,9 +61,8 @@ describe('E2E Tests', () => {
         }
 
         console.log('Success! Transit data fetched as JSON');
-        console.log('Number of origin routes:', body.routes.length);
-        console.log('First origin:', firstOrigin.origin);
-        console.log('First transfer summary:', summary);
+        console.log('Origin statuses:', body.origins.map(o => `${o.origin}=${o.status}`).join(', '));
+        console.log('Fastest origin:', body.fastestOrigin);
       } else {
         // If failed, check error response structure
         assert.ok(body.error, 'Should have error field on failure');
@@ -111,7 +94,7 @@ describe('E2E Tests', () => {
 
         // Verify JSON response
         const body = JSON.parse(result.body);
-        assert.ok(body.routes || body.error, 'Should have routes or error');
+        assert.ok(body.origins || body.error, 'Should have origins or error');
 
         console.log('Docker Lambda Response statusCode:', result.statusCode);
         console.log('Docker Lambda Response:', body);

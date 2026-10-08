@@ -3,7 +3,7 @@ import { ArrowRight, ArrowClockwise, Train, Spinner, Tray } from '@phosphor-icon
 import { useTransit, useApiStatus } from './hooks/useTransit'
 import { TransitCard } from './components/TransitCard'
 import { StatusIndicator } from './components/StatusIndicator'
-import { candidateToRoute, parseSummary, type Candidate, type OriginResult, type TransitRoute } from './types/transit'
+import type { Candidate, OriginResult } from './types/transit'
 import { formatClockTime } from './lib/time'
 import styles from './App.module.css'
 
@@ -31,14 +31,11 @@ function tabSummary(result: OriginResult, fastestOrigin: string | null, fastestA
 }
 
 function App() {
-  const { originRoutes, origins, fastestOrigin, loading, error, lastUpdated, refresh } = useTransit()
+  const { origins, fastestOrigin, loading, error, lastUpdated, refresh } = useTransit()
   const apiStatus = useApiStatus()
 
-  // Tabs come from the structured `origins` (ADR 0006 D-2). While the legacy `routes` field still
-  // ships (D-3), a structured part that failed validation leaves `origins` empty, so fall back to
-  // the legacy origins rather than render no tabs at all.
-  const structured = origins.length > 0
-  const tabOrigins = structured ? origins.map(o => o.origin) : originRoutes.map(r => r.origin)
+  // Tabs come from the structured `origins` (ADR 0006 D-2), in the server's config order.
+  const tabOrigins = origins.map(o => o.origin)
 
   // Selection: `fastestOrigin` by default (first tab when null). A manual pick is stamped with
   // the fetch it was made on and holds only while that is still the latest successful fetch -
@@ -58,16 +55,9 @@ function App() {
   const fastestArrivalMs = fastestOriginCandidate ? Date.parse(fastestOriginCandidate.arrivalAt) : null
 
   // The keyline marks the server's `isFastest` candidate (ADR 0006 D-4), never a card position.
-  // The legacy fallback carries no such flag, so it marks nothing. The cards keep the fetched
-  // order: the per-second countdown inside each card never re-sorts or drops one.
-  const cards: { route: TransitRoute; isNext: boolean; structured?: { candidate: Candidate; walkMinutes: number } }[] =
-    structured
-      ? (activeResult?.candidates ?? []).map(candidate => ({
-          route: candidateToRoute(candidate),
-          isNext: candidate.isFastest,
-          structured: { candidate, walkMinutes: activeResult?.walkMinutes ?? 0 },
-        }))
-      : (originRoutes.find(r => r.origin === activeOrigin)?.transfers ?? []).map(route => ({ route, isNext: false }))
+  // The cards keep the fetched order: the per-second countdown inside each card never re-sorts
+  // or drops one.
+  const cards = activeResult?.candidates ?? []
   // A fetch error does not hide the cards: useTransit keeps the last-known data on failure, so
   // they stay on screen under the error banner (ADR 0007 D-2).
   const hasCards = cards.length > 0
@@ -271,12 +261,12 @@ function App() {
                       leave a stale card expanded after a tab switch or refresh. The index
                       tiebreaker only guards against two candidates sharing a departure time
                       (duplicate keys); the origin + time prefix still forces the remount. */}
-                  {cards.map(({ route, isNext, structured: card }, index) => (
+                  {cards.map((candidate, index) => (
                     <TransitCard
-                      key={`${activeOrigin}-${parseSummary(route.summary).departureTime}-${index}`}
-                      route={route}
-                      isNext={isNext}
-                      structured={card}
+                      key={`${activeOrigin}-${candidate.departureAt}-${index}`}
+                      candidate={candidate}
+                      walkMinutes={activeResult?.walkMinutes ?? 0}
+                      isNext={candidate.isFastest}
                     />
                   ))}
                 </div>

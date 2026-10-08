@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import type { Candidate, Leg, LineCode } from '../src/types/transit'
-import { candidateToRoute } from '../src/types/transit'
 import pillStyles from '../src/components/LinePill.module.css'
 import cardStyles from '../src/components/TransitCard.module.css'
 import detailStyles from '../src/components/RouteDetail.module.css'
@@ -65,9 +64,7 @@ function makeCandidate(overrides: Partial<Candidate> = {}): Candidate {
 
 function renderCard(nowMs: number, candidate = makeCandidate(), isNext = false) {
   clock.now = nowMs
-  return render(
-    <TransitCard route={candidateToRoute(candidate)} isNext={isNext} structured={{ candidate, walkMinutes: WALK }} />
-  )
+  return render(<TransitCard candidate={candidate} walkMinutes={WALK} isNext={isNext} />)
 }
 
 beforeEach(() => {
@@ -94,17 +91,11 @@ describe('TransitCard summary', () => {
     expect(screen.getByText('乗換少')).toBeDefined()
   })
 
-  it('renders the legacy fallback without a countdown, labels or line pills', () => {
-    clock.now = LEAVE_AT - 10 * MIN
-    const { container } = render(
-      <TransitCard route={{ summary: '18:49発 → 19:38着(49分)(1回)', route: '■六本木一丁目\n｜東京メトロ南北線' }} isNext={false} />
-    )
+  it('spells an hour-long duration as N時間M分 and reads the transfer count from the candidate', () => {
+    renderCard(LEAVE_AT - 10 * MIN, makeCandidate({ arrivalAt: at('20:04'), durationMinutes: 75, transferCount: 0 }))
 
-    expect(screen.getByText('18:49')).toBeDefined()
-    expect(screen.getByText('19:38着')).toBeDefined()
-    expect(container.querySelector(`.${cardStyles.countdown}`)).toBeNull()
-    expect(container.querySelector(`.${pillStyles.pill}`)).toBeNull()
-    expect(screen.queryByText('最速')).toBeNull()
+    expect(screen.getByText('20:04着')).toBeDefined()
+    expect(screen.getByText('1時間15分 · 乗換0回')).toBeDefined()
   })
 })
 
@@ -132,7 +123,7 @@ describe('TransitCard countdown badge', () => {
     // A later tick: the same card stays on screen and only its badge changes.
     clock.now = LEAVE_AT + MIN
     const candidate = makeCandidate()
-    rerender(<TransitCard route={candidateToRoute(candidate)} isNext={false} structured={{ candidate, walkMinutes: WALK }} />)
+    rerender(<TransitCard candidate={candidate} walkMinutes={WALK} isNext={false} />)
     expect(badge(container)?.textContent).toBe('間に合いません')
     expect(screen.getByText('18:49')).toBeDefined()
   })
@@ -157,14 +148,6 @@ describe('TransitCard expanded route', () => {
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelector('ol')?.className).toBe(detailStyles.route)
     expect(container.querySelector('time')?.textContent).toBe('18:49発')
-  })
-
-  it('draws the legacy timeline when the card has no structured candidate', () => {
-    clock.now = LEAVE_AT
-    const { container } = render(<TransitCard route={candidateToRoute(makeCandidate())} isNext />)
-
-    expect(container.querySelector('ol')?.className).toBe(detailStyles.timeline)
-    expect(container.querySelector('time')).toBeNull()
   })
 })
 

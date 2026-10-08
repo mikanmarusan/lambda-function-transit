@@ -62,13 +62,6 @@ sam deploy
 **Response** (abridged; the full contract is in [`docs/architecture.md`](./docs/architecture.md) §4 Data Model):
 ```json
 {
-  "routes": [
-    {
-      "origin": "六本木一丁目",
-      "destination": "つつじヶ丘（東京）",
-      "transfers": [["20:45発 → 21:24着(39分)(2回)", "■六本木一丁目\n｜［地下鉄］東京メトロ南北線...\n■つつじヶ丘（東京）"]]
-    }
-  ],
   "generatedAt": "2026-10-06T20:40:12+09:00",
   "destination": "つつじヶ丘（東京）",
   "fastestOrigin": "六本木一丁目",
@@ -78,7 +71,7 @@ sam deploy
 }
 ```
 
-`routes` (up to 2 candidates per origin, Jorudan order) is the legacy field kept until the frontend reads `origins` (up to 3 candidates per origin, sorted by arrival).
+`origins` lists every configured origin with up to 3 candidates each, sorted by arrival. The legacy `routes` field (`[summary, route]` string tuples) has been removed.
 
 ## Project Structure
 

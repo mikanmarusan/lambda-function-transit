@@ -1,27 +1,9 @@
-import { formatClockTime } from '../lib/time'
-
-export interface TransitRoute {
-  summary: string
-  route: string
-}
-
-export interface OriginRoute {
-  origin: string
-  destination: string
-  transfers: TransitRoute[]
-}
-
-export interface TransitResponse {
-  routes: { origin: string; destination: string; transfers: [string, string][] }[]
-}
-
 export interface StatusResponse {
   status: string
   timestamp: string
 }
 
 export interface MultiTransitState {
-  originRoutes: OriginRoute[]
   origins: OriginResult[]
   generatedAt: string | null
   fastestOrigin: string | null
@@ -77,7 +59,7 @@ export interface OriginResult {
   candidates: Candidate[]
 }
 
-/** The structured fields of `GET /api/transit` (ADR 0006 D-2), next to the legacy `routes`. */
+/** The body of `GET /api/transit`: the structured transit contract (ADR 0006 D-2). */
 export interface StructuredTransit {
   generatedAt: string
   destination: string
@@ -166,7 +148,7 @@ function isOriginResult(v: unknown): boolean {
 }
 
 /**
- * Validates the structured fields of a transit response. Rejects (fails closed on)
+ * Validates a transit response. Rejects (fails closed on)
  * a malformed payload or one that exceeds `STRUCTURED_LIMITS`, so nothing unchecked
  * reaches the UI; `lineCode` must be one of `LINE_CODES` or `null`, because it
  * later selects an allow-listed CSS class (ADR 0008 D-1).
@@ -177,75 +159,4 @@ export function isValidStructuredTransit(data: unknown): data is StructuredTrans
   if (!isBoundedArray(data.origins, STRUCTURED_LIMITS.origins) || !data.origins.every(isOriginResult)) return false
   const names = (data.origins as OriginResult[]).map((o) => o.origin)
   return data.fastestOrigin === null || (typeof data.fastestOrigin === 'string' && names.includes(data.fastestOrigin))
-}
-
-export function parseTransitResponse(data: TransitResponse): OriginRoute[] {
-  return data.routes.map(({ origin, destination, transfers }) => ({
-    origin,
-    destination,
-    transfers: transfers.map(([summary, route]) => ({ summary, route })),
-  }))
-}
-
-/**
- * Writes a structured candidate in the legacy `[summary, route]` string shape, so the existing
- * `TransitCard` / `RouteDetail` can draw `origins` candidates until they read `Candidate`
- * directly. Times are the JST `HH:MM` of the ISO instants; the first and last stops are
- * terminals (`■`), the rest transfers (`◇`), each followed by the line of the leg leaving it.
- */
-export function candidateToRoute(candidate: Candidate): TransitRoute {
-  const clock = (iso: string) => formatClockTime(Date.parse(iso))
-  // Jorudan's own `N時間M分` / `N時間` / `M分` spelling, which parseSummary reads back verbatim.
-  const hours = Math.floor(candidate.durationMinutes / 60)
-  const minutes = candidate.durationMinutes % 60
-  const duration = hours === 0 ? `${minutes}分` : minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`
-  const summary =
-    `${clock(candidate.departureAt)}発 → ${clock(candidate.arrivalAt)}着` +
-    `(${duration})(${candidate.transferCount}回)`
-  const last = candidate.stops.length - 1
-  const route = candidate.stops
-    .flatMap((stop, index) => {
-      const station = `${index === 0 || index === last ? '■' : '◇'}${stop.station}`
-      const leg = candidate.legs[index]
-      return leg ? [station, `｜${leg.lineName}`] : [station]
-    })
-    .join('\n')
-  return { summary, route }
-}
-
-export function parseSummary(summary: string): {
-  departureTime: string
-  arrivalTime: string
-  duration: string
-  transfers: string
-} {
-  const timeMatch = summary.match(/(\d{1,2}:\d{2})(?:発\s{0,10}→\s{0,10}|～)(\d{1,2}:\d{2})(?:着)?/)
-  const durationMatch = summary.match(/\((\d+時間\d+分|\d+時間|\d+分)\)/)
-  const transfersMatch = summary.match(/\((\d+回)\)/)
-
-  return {
-    departureTime: timeMatch?.[1] ?? '--:--',
-    arrivalTime: timeMatch?.[2] ?? '--:--',
-    duration: durationMatch?.[1] ?? '--',
-    transfers: transfersMatch?.[1] ?? '--',
-  }
-}
-
-export function parseRoute(route: string): { station: string; line: string | null; isTerminal: boolean }[] {
-  const lines = route.split('\n').filter(line => line.trim())
-  const result: { station: string; line: string | null; isTerminal: boolean }[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (line.startsWith('■') || line.startsWith('◇')) {
-      const station = line.replace(/^[■◇]/, '').trim()
-      const nextLine = lines[i + 1]
-      const lineName = nextLine?.startsWith('｜') ? nextLine.replace(/^｜/, '').trim() : null
-      const isTerminal = line.startsWith('■')
-      result.push({ station, line: lineName, isTerminal })
-      if (lineName !== null) i++
-    }
-  }
-
-  return result
 }

@@ -1,23 +1,19 @@
 import { Fragment, useState } from 'react'
 import { CaretDown, CaretRight, CaretUp } from '@phosphor-icons/react'
-import { TransitRoute, parseSummary, type Candidate } from '../types/transit'
+import type { Candidate } from '../types/transit'
 import { useNow } from '../hooks/useNow'
-import { leaveCountdown, minutesUntilLeave, type LeaveTone } from '../lib/time'
+import { formatClockTime, formatDuration, leaveCountdown, minutesUntilLeave, type LeaveTone } from '../lib/time'
 import { LinePill } from './LinePill'
 import { RouteDetail } from './RouteDetail'
 import styles from './TransitCard.module.css'
 
 interface TransitCardProps {
-  /** The legacy `[summary, route]` strings: the times, the duration, and the expanded timeline of a legacy card. */
-  route: TransitRoute
+  /** The structured candidate this card draws: its times, labels, line pills and `RouteDetail`. */
+  candidate: Candidate
+  /** Minutes from the office to the candidate's origin, which drive the leave-by countdown. */
+  walkMinutes: number
   /** True on the origin's earliest-arriving candidate (the server's `isFastest`, never a card position). */
   isNext: boolean
-  /**
-   * The structured candidate behind `route`, with its origin's walk minutes. It adds the
-   * countdown badge, the 最速 / 乗換少 labels, the line pills and the structured `RouteDetail`;
-   * the legacy fallback has none.
-   */
-  structured?: { candidate: Candidate; walkMinutes: number }
 }
 
 const COUNTDOWN_CLASS: Record<LeaveTone, string> = {
@@ -26,13 +22,11 @@ const COUNTDOWN_CLASS: Record<LeaveTone, string> = {
   missed: styles.countdownMissed,
 }
 
-export function TransitCard({ route, isNext, structured }: TransitCardProps) {
+export function TransitCard({ candidate, walkMinutes, isNext }: TransitCardProps) {
   const [expanded, setExpanded] = useState(isNext)
   const now = useNow()
-  const summary = parseSummary(route.summary)
-  const candidate = structured?.candidate ?? null
   // Recomputed on every shared-clock tick; the card list itself is never re-sorted or pruned here.
-  const minutes = structured ? minutesUntilLeave(structured.candidate.departureAt, structured.walkMinutes, now) : null
+  const minutes = minutesUntilLeave(candidate.departureAt, walkMinutes, now)
   const countdown = minutes === null ? null : leaveCountdown(minutes)
 
   return (
@@ -47,20 +41,20 @@ export function TransitCard({ route, isNext, structured }: TransitCardProps) {
         {isNext && <span className="visually-hidden">最速の便 </span>}
         <span className={styles.summary}>
           <span className={styles.lead}>
-            <span className={styles.departure}>{summary.departureTime}</span>
+            <span className={styles.departure}>{formatClockTime(Date.parse(candidate.departureAt))}</span>
             {countdown && (
               <span className={`${styles.countdown} ${COUNTDOWN_CLASS[countdown.tone]}`}>{countdown.label}</span>
             )}
           </span>
           <span className={styles.meta}>
-            <span className={styles.arrival}>{summary.arrivalTime}着</span>
+            <span className={styles.arrival}>{formatClockTime(Date.parse(candidate.arrivalAt))}着</span>
             <span className={styles.duration}>
-              {summary.duration} · 乗換{summary.transfers}
+              {formatDuration(candidate.durationMinutes)} · 乗換{candidate.transferCount}回
             </span>
-            {candidate?.isFastest && <span className={`${styles.badge} ${styles.badgeFastest}`}>最速</span>}
-            {candidate?.isFewestTransfers && <span className={styles.badge}>乗換少</span>}
+            {candidate.isFastest && <span className={`${styles.badge} ${styles.badgeFastest}`}>最速</span>}
+            {candidate.isFewestTransfers && <span className={styles.badge}>乗換少</span>}
           </span>
-          {candidate && candidate.legs.length > 0 && (
+          {candidate.legs.length > 0 && (
             <span className={styles.lines}>
               {candidate.legs.map((leg, index) => (
                 <Fragment key={index}>
@@ -77,7 +71,7 @@ export function TransitCard({ route, isNext, structured }: TransitCardProps) {
       </button>
       {expanded && (
         <div className={styles.body}>
-          <RouteDetail route={route.route} candidate={structured?.candidate} />
+          <RouteDetail candidate={candidate} />
         </div>
       )}
     </div>

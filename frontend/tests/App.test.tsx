@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import type { Candidate, OriginResult, OriginRoute } from '../src/types/transit'
+import type { Candidate, OriginResult } from '../src/types/transit'
 import cardStyles from '../src/components/TransitCard.module.css'
 
 /**
@@ -10,7 +10,7 @@ import cardStyles from '../src/components/TransitCard.module.css'
  * The empty state (Tech Debt #4: it gives --bg-elevated a role) is gated on `lastUpdated`, not
  * merely on `!loading`, because useTransit starts with loading = false: without that guard the
  * first paint - which happens before the fetch effect runs - would satisfy
- * `!loading && routes.length === 0` and flash the empty card at every visitor. The hook is mocked
+ * `!loading && origins.length === 0` and flash the empty card at every visitor. The hook is mocked
  * so each branch, including that pre-fetch instant, can be driven exactly rather than raced.
  */
 
@@ -26,7 +26,6 @@ vi.mock('../src/hooks/useTransit', () => ({ useTransit, useApiStatus }))
 import App from '../src/App'
 
 type TransitState = {
-  originRoutes: OriginRoute[]
   origins: OriginResult[]
   fastestOrigin: string | null
   loading: boolean
@@ -37,7 +36,6 @@ type TransitState = {
 /** Default is the settled-with-no-results state; each test overrides only what it cares about. */
 function mockTransit(state: Partial<TransitState> = {}) {
   useTransit.mockReturnValue({
-    originRoutes: [],
     origins: [],
     generatedAt: null,
     fastestOrigin: null,
@@ -49,13 +47,10 @@ function mockTransit(state: Partial<TransitState> = {}) {
   })
 }
 
-const routes: OriginRoute[] = [
-  {
-    origin: '六本木一丁目',
-    destination: 'つつじヶ丘',
-    transfers: [{ summary: '18:49発 → 19:38着(49分)(1回)', route: '■六本木一丁目\n｜東京メトロ南北線' }],
-  },
-]
+/** One origin with one 18:49 candidate. A function, so the fixture helpers below are initialised. */
+function oneCard(): OriginResult[] {
+  return [originResult('六本木一丁目', [candidate('18:49', '19:38', true)])]
+}
 
 const EMPTY = 'No departures found'
 const LOADING = 'Loading transit information...'
@@ -83,7 +78,7 @@ describe('App content branches', () => {
   })
 
   it('error with prior data: keeps the last-known cards visible under the banner', () => {
-    mockTransit({ originRoutes: routes, error: RAW_ERROR })
+    mockTransit({ origins: oneCard(), error: RAW_ERROR })
     render(<App />)
 
     const alert = screen.getByRole('alert')
@@ -103,7 +98,7 @@ describe('App content branches', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('empty: shows the empty state once a fetch has settled with no routes', () => {
+  it('empty: shows the empty state once a fetch has settled with no origins', () => {
     mockTransit()
     render(<App />)
 
@@ -112,8 +107,8 @@ describe('App content branches', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('normal: shows cards and no status branch when routes are present', () => {
-    mockTransit({ originRoutes: routes })
+  it('normal: shows cards and no status branch when candidates are present', () => {
+    mockTransit({ origins: oneCard() })
     render(<App />)
 
     expect(screen.getByText('18:49')).toBeDefined()
@@ -132,7 +127,7 @@ describe('App content branches', () => {
   })
 
   it('never renders the raw error message from the hook', () => {
-    mockTransit({ originRoutes: routes, error: RAW_ERROR })
+    mockTransit({ origins: oneCard(), error: RAW_ERROR })
     const { container } = render(<App />)
 
     expect(container.textContent).not.toContain(RAW_ERROR)
@@ -167,7 +162,7 @@ describe('App content branches', () => {
  */
 describe('App stale-data pill wiring', () => {
   it('wires the 更新 button to refresh and parks focus on <main>', () => {
-    mockTransit({ originRoutes: routes })
+    mockTransit({ origins: oneCard() })
     const { container } = render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: '更新' }))
@@ -176,7 +171,7 @@ describe('App stale-data pill wiring', () => {
   })
 
   it('passes loading through as refreshing (更新 disabled and busy while a fetch is in flight)', () => {
-    mockTransit({ originRoutes: routes, loading: true })
+    mockTransit({ origins: oneCard(), loading: true })
     render(<App />)
 
     const button = screen.getByRole('button', { name: '更新' })
@@ -471,16 +466,6 @@ describe('station tabs (issue #122, ADR 0007 D-2)', () => {
     expect(screen.getByText('今すぐ出発')).toBeDefined()
     expect(screen.queryByText('あと5分で出る')).toBeNull()
   })
-
-  it('falls back to the legacy origins, without summaries, when the structured field is absent', () => {
-    mockTransit({ originRoutes: routes })
-    render(<App />)
-
-    expect(tab(ROPPONGI).getAttribute('aria-selected')).toBe('true')
-    expect(tab(ROPPONGI).textContent).toBe(ROPPONGI)
-    expect(screen.getByText('18:49')).toBeDefined()
-    expect(screen.queryByText(/到着が早い順/)).toBeNull()
-  })
 })
 
 /**
@@ -523,12 +508,7 @@ describe('fastest-arrival marker', () => {
     expect(header.querySelector('.visually-hidden')).not.toBeNull()
   })
 
-  it('marks nothing on the legacy fallback, in the empty state, or on a failed origin', () => {
-    mockTransit({ originRoutes: routes })
-    const legacy = render(<App />)
-    expect(markedCards(legacy.container)).toHaveLength(0)
-    legacy.unmount()
-
+  it('marks nothing in the empty state or on a failed origin', () => {
     mockTransit()
     const empty = render(<App />)
     expect(markedCards(empty.container)).toHaveLength(0)

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { STALE_AFTER_MS, formatClockTime, isStale, leaveCountdown, minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
+import { STALE_AFTER_MS, formatClockTime, formatDuration, isStale, leaveCountdown, minutesUntilLeave, relativeTimeLabel } from '../src/lib/time'
 
 const DEPARTURE = '2026-10-06T20:45:00+09:00'
 const WALK = 4
@@ -132,5 +132,19 @@ describe('formatClockTime', () => {
   it('formats JST HH:MM regardless of the runtime time zone', () => {
     expect(formatClockTime(Date.parse('2026-07-13T09:00:00Z'))).toBe('18:00')
     expect(formatClockTime(Date.parse('2026-07-13T15:05:00Z'))).toBe('00:05')
+  })
+})
+
+describe('formatDuration', () => {
+  it.each([
+    [0, '0分'],
+    [52, '52分'],
+    [59, '59分'],
+    [60, '1時間'],
+    [75, '1時間15分'],
+    [120, '2時間'],
+    [135, '2時間15分'],
+  ])('spells %i minutes the way Jorudan does (%s)', (minutes, expected) => {
+    expect(formatDuration(minutes)).toBe(expected)
   })
 })

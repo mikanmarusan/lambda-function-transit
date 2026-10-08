@@ -12,14 +12,6 @@ const TSUTSUJIGAOKA = 'つつじヶ丘'
 const ROPPONGI = '六本木一丁目'
 const TOKYO = '東京'
 
-const ROUTE_BODY = [
-  `■${ROPPONGI}`,
-  '｜東京メトロ南北線',
-  '◇溜池山王',
-  '｜東京メトロ銀座線・半蔵門線直通',
-  `■${TSUTSUJIGAOKA}`,
-].join('\n')
-
 /** JST instant on the fixture day, the shape every structured timestamp takes (ADR 0006 D-2). */
 const at = (hhmm: string) => `2026-07-13T${hhmm}:00+09:00`
 
@@ -33,7 +25,7 @@ const stop = (station: string, transferMinutes: number | null = null, waitMinute
 })
 
 /**
- * One structured candidate on the ROUTE_BODY path: 南北線 to 溜池山王 (with its train type,
+ * One structured candidate from 六本木一丁目 to つつじヶ丘: 南北線 to 溜池山王 (with its train type,
  * destination, distance and boarding position, and a 乗換 / 待ち transfer there), then a
  * 銀座線・半蔵門線 leg.
  */
@@ -75,42 +67,21 @@ function originResult(origin: string, candidates: unknown[], status = 'ok', walk
   return { origin, walkMinutes, searchedFrom: at('18:44'), status, candidates }
 }
 
-/** The structured fields beside the legacy `routes` (ADR 0006 D-3: the response carries both). */
+/** A `GET /api/transit` body: the structured transit contract (ADR 0006 D-2). */
 function structured(fastestOrigin: string | null, origins: unknown[]) {
   return { generatedAt: at('18:40'), destination: TSUTSUJIGAOKA, fastestOrigin, origins }
 }
 
-const TRANSIT_PAYLOAD = {
-  ...structured(ROPPONGI, [
-    originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
-    originResult(TOKYO, [candidate('18:55', '19:40', true)]),
-  ]),
-  routes: [
-    {
-      origin: ROPPONGI,
-      destination: TSUTSUJIGAOKA,
-      transfers: [
-        ['18:49発 → 19:38着(49分)(1回)', ROUTE_BODY],
-        ['19:04発 → 19:52着(48分)(1回)', ROUTE_BODY],
-      ],
-    },
-    {
-      origin: TOKYO,
-      destination: TSUTSUJIGAOKA,
-      transfers: [['18:55発 → 19:40着(45分)(1回)', ROUTE_BODY]],
-    },
-  ],
-}
+const TRANSIT_PAYLOAD = structured(ROPPONGI, [
+  originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+  originResult(TOKYO, [candidate('18:55', '19:40', true)]),
+])
 
-const EMPTY_PAYLOAD = { routes: [] }
+const EMPTY_PAYLOAD = structured(null, [])
 
 /** A tab strip wide enough to overflow a phone viewport - the case `overflow-x: auto` exists for. */
 const CROWDED_ORIGINS = ['六本木一丁目', '溜池山王', '東京', '大手町', '国会議事堂前', '新宿三丁目', '渋谷'].map(
-  (origin) => ({
-    origin,
-    destination: TSUTSUJIGAOKA,
-    transfers: [['18:49発 → 19:38着(49分)(1回)', ROUTE_BODY]],
-  })
+  (origin) => originResult(origin, [candidate('18:49', '19:38', true)])
 )
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -323,7 +294,7 @@ test.describe('Stale-data pill (issue #121)', () => {
 })
 
 test.describe('Empty state (Tech Debt #7b / state #4)', () => {
-  test('shows the empty card, not a blank pane, when a settled fetch returns no routes', async ({
+  test('shows the empty card, not a blank pane, when a settled fetch returns no origins', async ({
     page,
   }) => {
     await mockApi(page, { transit: EMPTY_PAYLOAD })
@@ -398,7 +369,7 @@ test.describe('Touch targets (Tech Debt #6)', () => {
     // the neighbours - while still passing the 44x44 check above. Crowd the strip and prove the
     // labels stay inside their own boxes and the strip scrolls instead.
     await page.setViewportSize({ width: 375, height: 667 })
-    await mockApi(page, { transit: { routes: CROWDED_ORIGINS } })
+    await mockApi(page, { transit: structured(null, CROWDED_ORIGINS) })
     await page.goto('/')
 
     const tabs = page.locator('[class*="_tab_"]')
@@ -481,38 +452,6 @@ test.describe('CJK typography', () => {
       // instead of demanding an exact 1.6 ratio.
       expect(lineHeight).toBeGreaterThanOrEqual(fontSize * 1.6 - 0.02)
     }
-  })
-
-  test('confines word-break: break-word to the raw <pre> fallback', async ({ page }) => {
-    // `word-break: normal` above is also the CSS initial value, so on its own it proves nothing.
-    // What has to hold is the *separation*: break-word is the raw fallback's alone and must not
-    // reach the station and line labels, where it would break a name mid-glyph.
-    await mockApi(page, {
-      transit: {
-        routes: [
-          {
-            origin: ROPPONGI,
-            destination: TSUTSUJIGAOKA,
-            // No ■/◇ markers: parseRoute() yields nothing and RouteDetail drops to <pre>.
-            transfers: [['18:49発 → 19:38着(49分)(1回)', '六本木一丁目から溜池山王を経てつつじヶ丘まで']],
-          },
-        ],
-      },
-    })
-    await page.goto('/')
-    // The legacy-only payload marks no card (no `isFastest`), so none opens by default.
-    await page.getByRole('button', { name: /18:49/ }).click()
-
-    const raw = page.locator('[class*="rawRoute"]')
-    await expect(raw).toBeVisible()
-    expect(await computed(raw, 'word-break')).toBe('break-word')
-
-    // break-word belongs to the fallback alone: the station label rendered from the same response
-    // must still compute `normal`. (`word-break` inherits, so a container-level declaration is
-    // exactly how it would leak.)
-    const station = page.locator('[class*="_station_"]').first()
-    await expect(station).toBeVisible()
-    expect(await computed(station, 'word-break')).toBe('normal')
   })
 
   test('renders long Japanese names without overflowing the column', async ({ page }) => {
@@ -682,15 +621,12 @@ test.describe('Station tabs (issue #122, ADR 0007 D-2)', () => {
   const TAMEIKE = '溜池山王'
 
   /** 神谷町 arrives first, so the fastest origin is NOT the first tab; 麻布十番 failed, 溜池山王 has no train. */
-  const STATION_PAYLOAD = {
-    ...structured(KAMIYACHO, [
-      originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
-      originResult(KAMIYACHO, [candidate('18:52', '19:30', true)], 'ok', 7),
-      originResult(AZABU, [], 'error', 11),
-      originResult(TAMEIKE, [], 'no_candidates', 9),
-    ]),
-    routes: [],
-  }
+  const STATION_PAYLOAD = structured(KAMIYACHO, [
+    originResult(ROPPONGI, [candidate('18:49', '19:38', true), candidate('19:04', '19:52')]),
+    originResult(KAMIYACHO, [candidate('18:52', '19:30', true)], 'ok', 7),
+    originResult(AZABU, [], 'error', 11),
+    originResult(TAMEIKE, [], 'no_candidates', 9),
+  ])
 
   const tab = (page: Page, name: string) => page.getByRole('tab', { name: new RegExp(name) })
 
