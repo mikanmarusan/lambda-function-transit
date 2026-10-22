@@ -1,5 +1,5 @@
 /* GENERATED FILE - DO NOT EDIT.
- * Source of truth: frontend/DESIGN.md frontmatter (@google/design.md 0.3.0).
+ * Source of truth: frontend/DESIGN.md frontmatter (@google/design.md 0.4.0).
  * Regenerate: npm run export:design
  */
 :root {
@@ -67,4 +67,3 @@
   --spacing-10: 40px;
   --spacing-12: 48px;
 }
-
