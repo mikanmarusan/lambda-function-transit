@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HEADER = `/* GENERATED FILE - DO NOT EDIT.
- * Source of truth: frontend/DESIGN.md frontmatter (@google/design.md 0.3.0).
+ * Source of truth: frontend/DESIGN.md frontmatter (@google/design.md 0.4.0).
  * Regenerate: npm run export:design
  */
 `

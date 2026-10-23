@@ -324,6 +324,17 @@ describe('design token pipeline', () => {
     expect(generatedCss).not.toMatch(/@import|url\(\s*['"]?http|fonts\.(googleapis|gstatic)/i)
   })
 
+  it('names the exact-pinned exporter version in the generated header', () => {
+    // The header is hand-written in export-design.mjs, so a bump of the pin would
+    // otherwise leave it naming the previous exporter version.
+    const pin = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8')).devDependencies[
+      '@google/design.md'
+    ]
+
+    expect(pin).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(generatedCss).toContain(`(@google/design.md ${pin}).`)
+  })
+
   it('matches a fresh export byte-for-byte and exports idempotently', () => {
     const first = buildTokensCss()
     const second = buildTokensCss()

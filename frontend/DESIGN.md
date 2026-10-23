@@ -754,7 +754,7 @@ components:
 
 - **`src/design-tokens.css` を手で編集しない**（次の `export:design` で上書きされ、ドリフトゲートで落ちる）。
 - **トークン値を `index.css` の別名レイヤに直書きしない**（別名は必ず `var(--color-*)` 等の生成トークンを指す）。
-- **無印 `npx @google/design.md` を実行しない**（実行時に最新 alpha を解決してしまう。0.3.0 に厳密固定済み）。
+- **無印 `npx @google/design.md` を実行しない**（実行時に最新 alpha を解決してしまう。0.4.0 に厳密固定済み）。
 - **影（box-shadow）を足さない**（Elevation & Depth）。
 - **スケール外の px を新規追加しない**（型階梯・spacing トークンの外）。`font-size` は必ず
   `--font-size-xs…--font-size-3xl` を使う（Vitest が拘束）。アイコン寸法は font-size ではなく `size` prop で渡す。
@@ -796,7 +796,7 @@ components:
 - **export 可能なトークン（色・font-size 階梯・weight・tracking・角丸・spacing）の正は本書の frontmatter。**
   新しい色・サイズは frontmatter に足し、`npm run export:design` を実行して `src/design-tokens.css` を再生成・コミットする。
   `index.css` には別名か手書き残余だけを置く。
-- **`@google/design.md` は `0.3.0` に厳密固定した devDependency。** 実行は必ず `npm run lint:design` /
+- **`@google/design.md` は `0.4.0` に厳密固定した devDependency。** 実行は必ず `npm run lint:design` /
   `npm run export:design`（ローカル bin）で行い、**無印 `npx` を使わない**（実行時に最新 alpha を解決してしまう）。
 - **テーマはダーク固定**（OS 未追従）。アイコンは **Phosphor Icons（`@phosphor-icons/react`）固定**。
 - UI は**単一ルート**（検索フォーム・出発地選択 UI・運賃比較・ソート・広告は持たない）。最小クロームのグランスボードを維持。
