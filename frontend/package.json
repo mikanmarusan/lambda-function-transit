@@ -47,6 +47,7 @@
   },
   "overrides": {
     "brace-expansion": "^5.0.12",
-    "@humanfs/node": "^0.16.8"
+    "@humanfs/node": "^0.16.8",
+    "zod": "^4.6.6"
   }
 }
