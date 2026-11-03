@@ -31,6 +31,7 @@ For the system overview and AWS topology diagram, start at the [`docs/architectu
 | Backend | `src/lambda_function.py` | Original Python implementation (reference only) |
 | Tests | `tests/handler.test.mjs` | Backend unit tests |
 | Tests | `tests/parse.test.mjs` | Route parser unit tests |
+| Tests | `tests/dev-server.test.mjs` | Dev server unit tests |
 | Tests | `tests/e2e.test.mjs` | Backend E2E tests |
 | Infra | `template.yml` | SAM template (Lambda + CloudFront + S3 + WAF wiring) |
 | Infra | `samconfig.toml` | SAM deployment configuration |
@@ -176,3 +177,5 @@ The Web ACL itself is **not** managed by this stack (it was created by the Cloud
 - A custom keyboard handler that cancels a key's default action must return early while a modifier key is held, so browser shortcuts bound to the same key (such as history navigation) keep working; pin it with a test that the modified press stays uncancelled.
 - When a doc says a hook or component keeps its earlier data after a failure, pin it with a test that first loads valid data, then drives the failing path, and asserts the earlier values survive. A test that starts from the initial empty state cannot tell "kept" from "reset", so it guards nothing.
 - After cutting a clause or list item out of an existing doc sentence, re-read the whole sentence, punctuation included, so the removal leaves no orphaned separator or dangling conjunction behind.
+- When a module exports a factory for tests and also starts itself as an entry point, test the entry path as well: launch it as a child process the way its container runs it and assert where it listens. Tests that only import the factory stay green when the main-module gate or the listen arguments break.
+- When a test reads a fact from a startup or status line, have the code print the value the runtime reports back (the address the socket actually bound) rather than echoing its own configuration variable. A line that repeats its input still passes after the effect it describes has silently changed.

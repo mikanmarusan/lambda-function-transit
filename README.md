@@ -30,6 +30,7 @@ docker-compose up api-dev
 docker-compose up api-dev
 # Access: http://localhost:8000/transit
 # Access: http://localhost:8000/status
+# Published on 127.0.0.1 only; `node src/dev-server.mjs` binds 127.0.0.1 unless DEV_SERVER_HOST is set
 
 # Direct Node.js
 node -e "import { handler } from './src/index.mjs'; handler({}, {}).then(r => console.log(r.body));"
@@ -86,6 +87,7 @@ src/
 tests/
 ├── handler.test.mjs   # Unit tests
 ├── parse.test.mjs     # Route parser unit tests
+├── dev-server.test.mjs # Dev server unit tests
 └── e2e.test.mjs       # E2E tests
 frontend/              # React frontend
 ├── src/               # Source code
