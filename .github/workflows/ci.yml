@@ -82,6 +82,7 @@ jobs:
         with:
           use-installer: true
       - run: sam validate --lint
+      - run: sam validate --lint -t infra/deploy-iam.yml
 
   validate-workflows:
     runs-on: ubuntu-latest
