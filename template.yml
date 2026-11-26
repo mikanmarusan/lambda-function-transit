@@ -48,18 +48,10 @@ Resources:
         MaximumEventAgeInSeconds: 21600
         MaximumRetryAttempts: 2
       PackageType: Zip
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-              Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
-            - Effect: Allow
-              Action:
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource:
-                - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-TransitFunction-*:*'
+      Role: !GetAtt TransitFunctionExecutionRole.Arn
+      LoggingConfig:
+        LogFormat: Text
+        LogGroup: !Ref TransitFunctionLogGroup
       RecursiveLoop: Terminate
       SnapStart:
         ApplyOn: None
@@ -77,11 +69,46 @@ Resources:
       RuntimeManagementConfig:
         UpdateRuntimeOn: Auto
 
+  # Log group for TransitFunction. The name differs from the auto-created
+  # /aws/lambda/<stack>-TransitFunction-* group, which a same-name
+  # AWS::Logs::LogGroup could not adopt.
+  TransitFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}/TransitFunction'
+      RetentionInDays: 30
+
+  # Execution role for TransitFunction: write access to its own log group only.
+  # No RoleName, so the generated name stays inside role/<stack>-*.
+  TransitFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: TransitFunctionLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt TransitFunctionLogGroup.Arn
+
   # S3 Bucket for Frontend
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub '${AWS::StackName}-frontend-${AWS::AccountId}'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
