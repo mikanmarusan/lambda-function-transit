@@ -287,258 +287,102 @@ CloudFront's flat-rate pricing plan requires the distribution to keep an attache
 
 The `Deploy to Production` workflow assumes the OIDC role `gh-actions-deploy-prod` (`arn:aws:iam::<ACCT>:role/gh-actions-deploy-prod`). The role's permissions are a least-privilege custom policy — `gh-actions-deploy-prod-leastpriv` — scoped to exactly what `sam deploy` of [`template.yml`](../template.yml) plus the post-deploy steps in [`deploy-production.yml`](../.github/workflows/deploy-production.yml) require. No `*FullAccess` AWS managed policy (and in particular no `IAMFullAccess` / `iam:*`) is attached.
 
+The GitHub OIDC provider, the role, and the policy are codified in [`infra/deploy-iam.yml`](../infra/deploy-iam.yml) (ADR 0009), a separate bootstrap stack named `transitmikanmarusan-deploy-iam` in `ap-northeast-1`. An account administrator applies that stack; `Deploy to Production` never creates, updates, or imports it. The policy document is the `DeployPolicy` resource in that template: it renders 11 statements with `EnableAppStackV2Grants=false` and 14 with `EnableAppStackV2Grants=true`, which adds `S3FrontendOwnershipControls`, `LogsTransitFunctionLogGroup`, and `LogsAccountWideReads` (ADR 0009 D-5). The template is the source of truth for the statements; this section does not copy them.
+
 #### What the workflow touches
 
 | Service | Why | Scope |
 |---------|-----|-------|
 | CloudFormation | Drift detect, change set create/execute, stack + output reads | `stack/transitmikanmarusan/*`; read-only on `stack/aws-sam-cli-managed-default/*` (so `--resolve-s3` can discover the artifact bucket) |
-| S3 | `--resolve-s3` artifact upload + `aws s3 sync` of the frontend bundle | SAM managed bucket `<SAM_ARTIFACT_BUCKET>` and frontend bucket `<FRONTEND_BUCKET>` |
+| S3 | `--resolve-s3` artifact upload, `aws s3 sync` of the frontend bundle, and `PutBucketOwnershipControls` for the frontend bucket's `BucketOwnerEnforced` ownership controls | SAM managed bucket `<SAM_ARTIFACT_BUCKET>` and frontend bucket `transitmikanmarusan-frontend-<ACCT>`; `PutBucketOwnershipControls` on the frontend bucket only |
 | Lambda | Function create/update/permission/tag during the change set | `function:transitmikanmarusan-*` |
 | API Gateway | REST API + stage + deployment managed by the change set | `/restapis`, `/restapis/*`, and `/tags/*` |
 | CloudFront | `GetDistributionConfig`, `UpdateDistribution`, OAC reads, `CreateInvalidation` | distribution `<CF_DISTRIBUTION_ID>` and OAC `<OAC_ID>` |
-| IAM | Lambda execution role lifecycle (`CAPABILITY_IAM`) + `PassRole` to Lambda | `role/transitmikanmarusan-*`; `PassRole` further gated by `iam:PassedToService = lambda.amazonaws.com` |
-
-#### Policy JSON
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "CloudFormationDeployStack",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:CreateChangeSet",
-        "cloudformation:DeleteChangeSet",
-        "cloudformation:ExecuteChangeSet",
-        "cloudformation:CreateStack",
-        "cloudformation:UpdateStack",
-        "cloudformation:SetStackPolicy",
-        "cloudformation:DetectStackDrift",
-        "cloudformation:DetectStackResourceDrift",
-        "cloudformation:TagResource",
-        "cloudformation:UntagResource",
-        "cloudformation:Describe*",
-        "cloudformation:Get*",
-        "cloudformation:List*"
-      ],
-      "Resource": "arn:aws:cloudformation:ap-northeast-1:<ACCT>:stack/transitmikanmarusan/*"
-    },
-    {
-      "Sid": "CloudFormationSamManagedStackRead",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:Describe*",
-        "cloudformation:Get*",
-        "cloudformation:List*"
-      ],
-      "Resource": "arn:aws:cloudformation:ap-northeast-1:<ACCT>:stack/aws-sam-cli-managed-default/*"
-    },
-    {
-      "Sid": "CloudFormationGlobalReads",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:ValidateTemplate",
-        "cloudformation:ListStacks",
-        "cloudformation:DescribeStackDriftDetectionStatus",
-        "cloudformation:GetTemplateSummary"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudFormationServerlessTransform",
-      "Effect": "Allow",
-      "Action": "cloudformation:CreateChangeSet",
-      "Resource": "arn:aws:cloudformation:ap-northeast-1:aws:transform/Serverless-2016-10-31"
-    },
-    {
-      "Sid": "S3BucketLevel",
-      "Effect": "Allow",
-      "Action": [
-        "s3:CreateBucket",
-        "s3:ListBucket",
-        "s3:GetBucketLocation",
-        "s3:GetBucket*",
-        "s3:GetEncryptionConfiguration",
-        "s3:GetLifecycleConfiguration",
-        "s3:GetReplicationConfiguration",
-        "s3:GetAccelerateConfiguration",
-        "s3:PutBucketPolicy",
-        "s3:DeleteBucketPolicy",
-        "s3:PutBucketTagging",
-        "s3:PutBucketVersioning",
-        "s3:PutEncryptionConfiguration",
-        "s3:PutBucketPublicAccessBlock"
-      ],
-      "Resource": [
-        "arn:aws:s3:::<SAM_ARTIFACT_BUCKET>",
-        "arn:aws:s3:::<FRONTEND_BUCKET>"
-      ]
-    },
-    {
-      "Sid": "S3ObjectLevel",
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:GetObjectTagging",
-        "s3:GetObjectVersion",
-        "s3:PutObject",
-        "s3:PutObjectTagging",
-        "s3:DeleteObject",
-        "s3:DeleteObjectVersion",
-        "s3:AbortMultipartUpload",
-        "s3:ListMultipartUploadParts"
-      ],
-      "Resource": [
-        "arn:aws:s3:::<SAM_ARTIFACT_BUCKET>/*",
-        "arn:aws:s3:::<FRONTEND_BUCKET>/*"
-      ]
-    },
-    {
-      "Sid": "Lambda",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:CreateFunction",
-        "lambda:UpdateFunctionCode",
-        "lambda:UpdateFunctionConfiguration",
-        "lambda:DeleteFunction",
-        "lambda:PublishVersion",
-        "lambda:AddPermission",
-        "lambda:RemovePermission",
-        "lambda:TagResource",
-        "lambda:UntagResource",
-        "lambda:PutFunctionEventInvokeConfig",
-        "lambda:UpdateFunctionEventInvokeConfig",
-        "lambda:DeleteFunctionEventInvokeConfig",
-        "lambda:Get*",
-        "lambda:List*"
-      ],
-      "Resource": "arn:aws:lambda:ap-northeast-1:<ACCT>:function:transitmikanmarusan-*"
-    },
-    {
-      "Sid": "ApiGateway",
-      "Effect": "Allow",
-      "Action": [
-        "apigateway:GET",
-        "apigateway:POST",
-        "apigateway:PUT",
-        "apigateway:PATCH",
-        "apigateway:DELETE"
-      ],
-      "Resource": [
-        "arn:aws:apigateway:ap-northeast-1::/restapis",
-        "arn:aws:apigateway:ap-northeast-1::/restapis/*",
-        "arn:aws:apigateway:ap-northeast-1::/tags/*"
-      ]
-    },
-    {
-      "Sid": "CloudFront",
-      "Effect": "Allow",
-      "Action": [
-        "cloudfront:GetDistribution",
-        "cloudfront:GetDistributionConfig",
-        "cloudfront:UpdateDistribution",
-        "cloudfront:CreateInvalidation",
-        "cloudfront:GetInvalidation",
-        "cloudfront:ListInvalidations",
-        "cloudfront:TagResource",
-        "cloudfront:UntagResource",
-        "cloudfront:ListTagsForResource",
-        "cloudfront:GetOriginAccessControl",
-        "cloudfront:GetOriginAccessControlConfig",
-        "cloudfront:UpdateOriginAccessControl"
-      ],
-      "Resource": [
-        "arn:aws:cloudfront::<ACCT>:distribution/<CF_DISTRIBUTION_ID>",
-        "arn:aws:cloudfront::<ACCT>:origin-access-control/<OAC_ID>"
-      ]
-    },
-    {
-      "Sid": "IamRoleLifecycle",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:DeleteRole",
-        "iam:GetRole",
-        "iam:GetRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
-        "iam:ListRolePolicies",
-        "iam:ListAttachedRolePolicies",
-        "iam:ListRoleTags",
-        "iam:TagRole",
-        "iam:UntagRole",
-        "iam:UpdateRole",
-        "iam:UpdateAssumeRolePolicy"
-      ],
-      "Resource": "arn:aws:iam::<ACCT>:role/transitmikanmarusan-*"
-    },
-    {
-      "Sid": "IamPassRoleToLambda",
-      "Effect": "Allow",
-      "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::<ACCT>:role/transitmikanmarusan-*",
-      "Condition": {
-        "StringEquals": {
-          "iam:PassedToService": "lambda.amazonaws.com"
-        }
-      }
-    }
-  ]
-}
-```
+| CloudWatch Logs | Create, update (retention), tag, and delete `TransitFunctionLogGroup`; read-only describe calls made by drift detection (ADR 0009 D-5) | `log-group:/aws/lambda/transitmikanmarusan/TransitFunction` (and `:*`); `DescribeLogGroups` / `DescribeResourcePolicies` / `DescribeIndexPolicies` on `Resource: "*"` |
+| IAM | Lifecycle of the explicit Lambda execution role `TransitFunctionExecutionRole` (`CAPABILITY_IAM`) + `PassRole` to Lambda | `role/transitmikanmarusan-*` (the role declares no `RoleName`, so its generated name stays inside that pattern); `PassRole` further gated by `iam:PassedToService = lambda.amazonaws.com` |
 
 #### Notes on scoping decisions
 
 - **Account-wide reads are unavoidable for four CloudFormation actions.** `ValidateTemplate`, `ListStacks`, `DescribeStackDriftDetectionStatus`, and `GetTemplateSummary` do not support resource-level permissions, so they sit in their own `Resource: "*"` statement. They are read/validate-only and carry no write blast radius.
-- **No `logs:*` is granted.** The template puts `logs:CreateLogGroup` / `CreateLogStream` / `PutLogEvents` inside the Lambda execution role's inline policy (created via `iam:PutRolePolicy`), so the deploy role itself needs no CloudWatch Logs permissions. This omission is deliberate but load-bearing: if an explicit `AWS::Logs::LogGroup` resource is ever added to the template (e.g. to set log retention), grant the deploy role `logs:CreateLogGroup` / `DeleteLogGroup` / `PutRetentionPolicy` / `TagResource` scoped to `log-group:/aws/lambda/transitmikanmarusan-*`.
+- **Three CloudWatch Logs reads are account-wide too.** `DescribeLogGroups`, `DescribeResourcePolicies`, and `DescribeIndexPolicies` cannot be narrowed to one log group, so `LogsAccountWideReads` grants them on `Resource: "*"`. Drift detection calls them with the deploy role's credentials (ADR 0009 D-5). They are read-only, but they let the role enumerate log groups beyond this project's own.
+- **CloudWatch Logs writes are scoped to the one log group.** `template.yml` declares `TransitFunctionLogGroup` (`/aws/lambda/transitmikanmarusan/TransitFunction`, 30-day retention), so CloudFormation's `AWS::Logs::LogGroup` handler needs `logs:CreateLogGroup`, `DeleteLogGroup`, `PutRetentionPolicy`, `DeleteRetentionPolicy`, `TagResource`, `UntagResource`, `ListTagsForResource`, and `GetDataProtectionPolicy`. `LogsTransitFunctionLogGroup` grants exactly those on that log group's ARN and its `:*` form. The deploy role holds no `logs:CreateLogStream` / `PutLogEvents`: those sit only in the Lambda execution role's inline `TransitFunctionLogs` policy (created via `iam:PutRolePolicy`), scoped to the same log group.
+- **`s3:PutBucketOwnershipControls` covers the frontend bucket only.** `FrontendBucket` declares `OwnershipControls` (`BucketOwnerEnforced`), and CloudFormation's S3 update handler calls `PutBucketOwnershipControls` to apply it. `S3FrontendOwnershipControls` grants it on `transitmikanmarusan-frontend-<ACCT>` alone, not on the SAM artifact bucket.
+- **The three grants above render only with `EnableAppStackV2Grants=true`.** The parameter defaults to `'false'`, which renders the pre-rollout policy. Every update of the deploy-IAM stack must pass `EnableAppStackV2Grants=true` (or keep its previous value); an update that falls back to `'false'` removes the S3 ownership-controls and logs grants the application stack needs, which brings back the deploy freeze described under step 5 below (ADR 0009).
 - **`cloudformation:DeleteStack` is intentionally excluded.** The workflow only ever updates the existing stack via change sets, so a deploy-only role has no reason to delete the production stack; re-grant it temporarily only for an intentional teardown.
-- **`--resolve-s3` reads the SAM managed stack.** SAM discovers the artifact bucket by describing the `aws-sam-cli-managed-default` CloudFormation stack, hence the read-only second statement. Bucket *creation* is not granted because the bucket already exists; if it is ever deleted, temporarily widen S3/CloudFormation create permissions to re-bootstrap it.
+- **`--resolve-s3` reads the SAM managed stack.** SAM discovers the artifact bucket by describing the `aws-sam-cli-managed-default` CloudFormation stack, hence the read-only second statement. `s3:CreateBucket` is granted only on the two named buckets, and no statement can create or update the `aws-sam-cli-managed-default` stack, so if the SAM artifact bucket is ever deleted, temporarily widen the CloudFormation permissions to re-bootstrap it.
 - **The SAM transform needs its own `CreateChangeSet` grant.** Because `template.yml` uses `Transform: AWS::Serverless-2016-10-31`, CloudFormation evaluates the macro during change-set creation and authorizes `cloudformation:CreateChangeSet` against the transform ARN `arn:aws:cloudformation:ap-northeast-1:aws:transform/Serverless-2016-10-31` (an AWS-owned resource), separately from the stack ARN. The `CloudFormationServerlessTransform` statement covers exactly that ARN.
 - **`DetectStackDrift` also requires `DetectStackResourceDrift`.** The async drift API fans out to a per-resource `cloudformation:DetectStackResourceDrift` call, so both actions are granted on the stack ARN.
 - **API Gateway is scoped by path, not by REST API id.** `apigateway:*` resource ARNs are path-based; pinning `/restapis/<REST_API_ID>` would break the deploy if CloudFormation ever replaces the REST API. `/restapis/*` keeps the deploy resilient while still excluding every other AWS service.
 - **CloudFront resource-level scoping.** The distribution and OAC are pinned by id. Distribution/OAC *replacement* (which needs account-level `cloudfront:CreateDistribution` / `CreateOriginAccessControl`) is intentionally excluded as least-privilege; grant it temporarily only if a future change forces a replace.
 - **`iam:PassRole` is gated by `iam:PassedToService`.** Even within `role/transitmikanmarusan-*`, the role can only be passed to Lambda, closing the pass-role-to-arbitrary-service escalation path.
+- **The deploy role cannot directly change its own identity; the indirect path stays open.** The deploy-IAM stack sits outside `stack/transitmikanmarusan/*`, and no statement targets `gh-actions-deploy-prod` or a managed policy, so the role cannot modify its own role or policy directly. `IamRoleLifecycle` still lets it create `role/transitmikanmarusan-*` roles with any policy and trust policy, and `IamPassRoleToLambda` lets it pass them to Lambda, so a deploy run could reach broader rights through such a role (ADR 0009 Consequences). The workflow's drift step checks only `transitmikanmarusan`; nothing in the repository detects drift on the deploy-IAM stack.
 
-#### Applying and verifying
+#### Applying the deploy IAM stack
 
-This policy is the documented target. Apply and verify it against the live role with the following sequence (the `dry-run` path must pass before detaching the managed policies, per the rollback risk noted in #52):
+Applying `infra/deploy-iam.yml` is a human step outside any repository change: merging a change to it changes nothing in AWS. The procedure below adopts the three pre-existing resources without recreating them, so the role ARN in `AWS_DEPLOY_ROLE_ARN_PROD` stays valid.
 
-```bash
-ACCOUNT=<ACCT>
-ROLE=gh-actions-deploy-prod
+1. An account administrator creates an IMPORT change set for the OIDC provider (identifier: `Arn`), the role (`RoleName`), and the policy (`PolicyArn`), then executes it. `EnableAppStackV2Grants=false` renders a policy equal to the live one, so the import adopts the resources unchanged:
 
-# 1. Create the customer-managed policy from the JSON above (saved locally as policy.json).
-#    If the policy already exists (re-runs), instead publish a new default version:
-#    aws iam create-policy-version --set-as-default \
-#      --policy-arn "arn:aws:iam::${ACCOUNT}:policy/gh-actions-deploy-prod-leastpriv" \
-#      --policy-document file://policy.json
-aws iam create-policy \
-  --policy-name gh-actions-deploy-prod-leastpriv \
-  --policy-document file://policy.json
+   ```bash
+   aws cloudformation create-change-set --region ap-northeast-1 \
+     --stack-name transitmikanmarusan-deploy-iam \
+     --change-set-name import-deploy-iam \
+     --change-set-type IMPORT \
+     --template-body file://infra/deploy-iam.yml \
+     --capabilities CAPABILITY_NAMED_IAM \
+     --resources-to-import file://resources-to-import.json \
+     --parameters \
+       ParameterKey=EnableAppStackV2Grants,ParameterValue=false \
+       ParameterKey=CloudFrontDistributionId,ParameterValue=<CF_DISTRIBUTION_ID> \
+       ParameterKey=OriginAccessControlId,ParameterValue=<OAC_ID> \
+       ParameterKey=SamArtifactBucketName,ParameterValue=<SAM_ARTIFACT_BUCKET>
+   ```
 
-# 2. Attach it alongside the existing managed policies (do NOT detach yet).
-aws iam attach-role-policy --role-name "$ROLE" \
-  --policy-arn "arn:aws:iam::${ACCOUNT}:policy/gh-actions-deploy-prod-leastpriv"
+   with `resources-to-import.json`:
 
-# 3. Verify end-to-end via the GitHub Actions "Deploy to Production" workflow:
-#    dry-run=true first, then dry-run=false. Both must succeed (sam deploy,
-#    S3 sync, CloudFront invalidation, and both health checks including the
-#    strict-transport-security / x-content-type-options / x-frame-options headers).
+   ```json
+   [
+     { "ResourceType": "AWS::IAM::OIDCProvider", "LogicalResourceId": "GitHubOidcProvider",
+       "ResourceIdentifier": { "Arn": "arn:aws:iam::<ACCT>:oidc-provider/token.actions.githubusercontent.com" } },
+     { "ResourceType": "AWS::IAM::Role", "LogicalResourceId": "DeployRole",
+       "ResourceIdentifier": { "RoleName": "gh-actions-deploy-prod" } },
+     { "ResourceType": "AWS::IAM::ManagedPolicy", "LogicalResourceId": "DeployPolicy",
+       "ResourceIdentifier": { "PolicyArn": "arn:aws:iam::<ACCT>:policy/gh-actions-deploy-prod-leastpriv" } }
+   ]
+   ```
 
-# 4. Only once both runs are green, detach the six *FullAccess managed policies:
-for p in AmazonAPIGatewayAdministrator CloudFrontFullAccess IAMFullAccess \
-         AmazonS3FullAccess AWSCloudFormationFullAccess AWSLambda_FullAccess; do
-  aws iam detach-role-policy --role-name "$ROLE" \
-    --policy-arn "arn:aws:iam::aws:policy/${p}"
-done
+   After reviewing that the change set shows `Import` for the three resources and nothing else, execute it:
 
-# 5. Re-run dry-run=false once more to confirm the scoped policy alone is sufficient.
-```
+   ```bash
+   aws cloudformation wait change-set-create-complete --region ap-northeast-1 \
+     --stack-name transitmikanmarusan-deploy-iam --change-set-name import-deploy-iam
+   aws cloudformation execute-change-set --region ap-northeast-1 \
+     --stack-name transitmikanmarusan-deploy-iam --change-set-name import-deploy-iam
+   ```
 
-If any step fails with an `AccessDenied`, read the denied action/resource from the error, widen the matching statement minimally, and re-run — rather than re-attaching the broad managed policies. Keep the six managed policies attached until step 5 is green so a mid-deploy denial cannot leave the stack in `UPDATE_ROLLBACK_FAILED`.
+2. The administrator updates the stack with `EnableAppStackV2Grants=true`, keeping the other parameters' previous values, and executes the change set (with the `wait` / `execute-change-set` pair from step 1, naming `enable-app-stack-v2-grants`) once it shows a modification of `DeployPolicy` alone:
+
+   ```bash
+   aws cloudformation create-change-set --region ap-northeast-1 \
+     --stack-name transitmikanmarusan-deploy-iam \
+     --change-set-name enable-app-stack-v2-grants \
+     --template-body file://infra/deploy-iam.yml \
+     --capabilities CAPABILITY_NAMED_IAM \
+     --parameters \
+       ParameterKey=EnableAppStackV2Grants,ParameterValue=true \
+       ParameterKey=AppStackName,UsePreviousValue=true \
+       ParameterKey=CloudFrontDistributionId,UsePreviousValue=true \
+       ParameterKey=OriginAccessControlId,UsePreviousValue=true \
+       ParameterKey=SamArtifactBucketName,UsePreviousValue=true
+   ```
+
+3. `Deploy to Production` runs with `dry-run=true`, then with `dry-run=false`.
+4. A second `dry-run=true` run confirms that drift detection passes on the new resources (`TransitFunctionLogGroup`, `TransitFunctionExecutionRole`).
+5. A deploy freeze runs from the `template.yml` change's merge until step 2 is live, because until then the deploy role lacks the S3 and logs grants the template needs. Running step 2 before that merge avoids the freeze.
+
+For the current templates, steps 1 and 2 ran on 2026-11-22 and steps 3 and 4 on 2026-11-27 (recorded on #150). Step 2 went live before the `template.yml` change (#148) merged, so no freeze occurred.
+
+If a deploy fails with an `AccessDenied`, read the denied action/resource from the error, widen the matching statement in `infra/deploy-iam.yml` minimally in a reviewed change, and have the administrator update the stack (still passing `EnableAppStackV2Grants=true`) — rather than attaching broad managed policies to the role.
 
 ## 7. Cross-cutting
 
@@ -604,6 +448,8 @@ CI (`.github/workflows/ci.yml`) runs `npm test` (Vitest) for both packages but *
 
 The handler emits structured JSON logs to CloudWatch so each step of the cookie flow (initial fetch, cookie set, final fetch, parse outcome) is queryable. Every origin whose `origins[].status` is not `ok` emits one `level: "warn"` `Partial origin fetch failure` line carrying `origin`, `status`, and `errorMessage` (the rejection message, or a fixed reason for an unparseable or route-less page).
 
+The function logs to the log group `/aws/lambda/<stack>/TransitFunction` (`/aws/lambda/transitmikanmarusan/TransitFunction` in production), declared in `template.yml` as `TransitFunctionLogGroup` with 30-day retention and wired through the function's `LoggingConfig` (`LogFormat: Text`). It writes through the explicit execution role `TransitFunctionExecutionRole`, whose only permissions are `logs:CreateLogStream` / `logs:PutLogEvents` on that log group (its inline `TransitFunctionLogs` policy), so the function cannot create log groups or write to any other one. The groups from before this log group existed — `/aws/lambda/<stack>-TransitFunction-*` and `/aws/lambda/<stack>-<stack>-*` — are not managed by the stack and stay behind with no retention; deleting them is a manual, optional cleanup.
+
 ## 8. Glossary
 
 - **`jrd_uuid`** — the sole gating cookie, set by `verify_uuid` with `Domain=.jorudan.co.jp` (shared across subdomains). Once present, the final `nori.cgi` renders the results HTML directly.
@@ -615,7 +461,9 @@ The handler emits structured JSON logs to CloudWatch so each step of the cookie 
 - **`lineCode`** — a leg's line identity from the closed set `N` (南北線), `M` (丸ノ内線), `H` (日比谷線), `Z` (半蔵門線), `E` (都営大江戸線), `S` (都営新宿線), `KO` (京王線 / 京王新線), or `null` (ADR 0008 D-1).
 - **WAF Web ACL** — the AWS WAF resource that must stay attached to the CloudFront distribution under its flat-rate pricing plan; ARN held in `WEB_ACL_ARN_PROD`.
 - **OAC** — CloudFront Origin Access Control, fronting the S3 origin.
-- **`gh-actions-deploy-prod`** — the GitHub OIDC IAM role assumed by the `Deploy to Production` workflow; backed by the least-privilege `gh-actions-deploy-prod-leastpriv` policy.
+- **`gh-actions-deploy-prod`** — the GitHub OIDC IAM role assumed by the `Deploy to Production` workflow; backed by the least-privilege `gh-actions-deploy-prod-leastpriv` policy. The role, the policy, and the GitHub OIDC provider are codified in `infra/deploy-iam.yml` and applied by an account administrator as the `transitmikanmarusan-deploy-iam` stack, never by the workflow (ADR 0009, §6).
+- **`EnableAppStackV2Grants`** — the `infra/deploy-iam.yml` parameter that adds the S3 ownership-controls and CloudWatch Logs grants when `'true'`; it defaults to `'false'`, so every update of the deploy-IAM stack must pass `'true'` or keep its previous value.
+- **`TransitFunctionExecutionRole`** — the Lambda execution role declared in `template.yml`; it may only write log streams and events to `/aws/lambda/<stack>/TransitFunction`.
 - **DESIGN.md** — `frontend/DESIGN.md`; its YAML frontmatter is the source of truth for the export-modelable design tokens.
 - **`design-tokens.css`** — `frontend/src/design-tokens.css`, generated from the DESIGN.md frontmatter by `npm run export:design`. Never hand-edited.
 - **Residue layer** — the hand-authored `:root` block in `frontend/src/index.css`: aliases from the generated token names onto the names call sites use, plus the tokens the exporter cannot model (font stacks, transitions).
